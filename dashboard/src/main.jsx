@@ -19,6 +19,7 @@ import {
   verifyCode,
 } from "../../src/supabase/client.js";
 import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../../src/supabase/config.js";
+import { createTeam, joinTeam, pull, push, watch } from "../../src/supabase/sync.js";
 import {
   LIST_COLORS,
   M,
@@ -417,29 +418,162 @@ const ListSettings = ({ list, onClose, onDone, activeList, setActiveList }) => {
   );
 };
 
-const TeamModal = ({ space, onClose, onDone, onImport, setActiveList }) => {
+const TeamModal = ({ space, state, onClose, onDone, onImport, setActiveList }) => {
   const isTeam = space && space.kind === "team";
+  const linked = !!(space && space.teamId);
+  const [session, setSession] = useState(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    getSession().then(setSession);
+  }, []);
+
+  const lists = spaceLists(state);
+
+  const run = async (label, fn) => {
+    setBusy(label);
+    setNote("");
+    const res = await fn();
+    setBusy("");
+    setNote(res.ok ? res.message || "Done." : res.error || "Failed.");
+    if (res.ok) onDone();
+  };
+
   return (
     <Modal onClose={onClose}>
       <h2>Team spaces</h2>
+
       {isTeam ? (
         <>
           <p>
-            Share this code and the space file so teammates can merge their saves into{" "}
-            <strong>{space.name}</strong>.
+            Share this code so teammates can join <strong>{space.name}</strong>.
           </p>
           <div className="code-display">{space.code}</div>
         </>
       ) : (
         <p>
-          <strong>{space && space.name}</strong> is a personal space. Create a team
-          space to collect a shared swipe file.
+          <strong>{space && space.name}</strong> is a personal space. Make it a
+          team space to share it, or join someone else's with their code.
         </p>
       )}
+
+      {!session ? (
+        <p className="note">
+          Sign in under Settings to use live sync. Without it, the file export
+          below still works: it is a snapshot rather than a live space.
+        </p>
+      ) : (
+        <>
+          <div className="modal-actions">
+            {!linked && (
+              <>
+                <Button
+                  variant="primary"
+                  disabled={!!busy}
+                  onClick={() =>
+                    run("create", async () => {
+                      const res = await createTeam(space.id, space.name);
+                      return res.ok
+                        ? { ok: true, message: `Team created. Code ${res.team.join_code}.` }
+                        : res;
+                    })
+                  }
+                >
+                  {busy === "create" ? "Creating..." : "Make this a team space"}
+                </Button>
+              </>
+            )}
+            {linked && (
+              <>
+                <Button
+                  variant="primary"
+                  disabled={!!busy}
+                  onClick={() =>
+                    run("push", async () => {
+                      const res = await push(space, lists, state.ads);
+                      return res.ok
+                        ? { ok: true, message: `Pushed ${res.ads} ads and ${res.lists} lists.` }
+                        : res;
+                    })
+                  }
+                >
+                  {busy === "push" ? "Pushing..." : "Push now"}
+                </Button>
+                <Button
+                  disabled={!!busy}
+                  onClick={() =>
+                    run("pull", async () => {
+                      const res = await pull(space, lists, state.ads);
+                      return res.ok
+                        ? {
+                            ok: true,
+                            message: `Pulled ${res.ads} ads and ${res.lists} lists${res.removed ? `, removed ${res.removed}` : ""}.`,
+                          }
+                        : res;
+                    })
+                  }
+                >
+                  {busy === "pull" ? "Pulling..." : "Pull now"}
+                </Button>
+              </>
+            )}
+          </div>
+
+          {!linked && (
+            <>
+              <div className="form-row">
+                <label className="field-label" htmlFor="join-code">Join code</label>
+                <input
+                  id="join-code"
+                  type="text"
+                  value={code}
+                  placeholder="six characters"
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                />
+              </div>
+              <div className="modal-actions">
+                <Button
+                  disabled={!!busy || code.length < 6}
+                  onClick={() =>
+                    run("join", async () => {
+                      const res = await joinTeam(space.id, code);
+                      if (!res.ok) return res;
+                      setActiveList("__all__");
+                      const pulled = await pull({ ...space, teamId: res.team.id }, lists, state.ads);
+                      return {
+                        ok: true,
+                        message: pulled.ok
+                          ? `Joined ${res.team.name}. Pulled ${pulled.ads} ads.`
+                          : `Joined ${res.team.name}.`,
+                      };
+                    })
+                  }
+                >
+                  {busy === "join" ? "Joining..." : "Join with code"}
+                </Button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {note && <p className="note">{note}</p>}
+
+      <div className="toggle-row">
+        <div className="toggle-text">
+          <div><strong>Export and import a file</strong></div>
+          <div className="toggle-sub">
+            The serverless route, kept because it needs no account: everyone's
+            lists merge on the join code. It is a snapshot, so re-export after
+            adding ads.
+          </div>
+        </div>
+      </div>
       <div className="modal-actions">
         {isTeam && (
           <Button
-            variant="primary"
             onClick={async () => {
               const res = await send({ type: "EXPORT_SPACE", spaceId: space.id });
               if (!res.ok) return;
@@ -454,28 +588,7 @@ const TeamModal = ({ space, onClose, onDone, onImport, setActiveList }) => {
           </Button>
         )}
         <Button onClick={onImport}>Join / merge from file</Button>
-        {!isTeam && (
-          <Button
-            variant="primary"
-            onClick={async () => {
-              const name = prompt("Name this team space:", "Team swipe file");
-              if (!name) return;
-              await send({ type: "SPACE_OP", op: "create", kind: "team", name });
-              onClose();
-              setActiveList("__all__");
-              onDone();
-            }}
-          >
-            Create team space
-          </Button>
-        )}
       </div>
-      <p className="note">
-        Sharing works by exporting a space file that teammates import: everyone's
-        lists merge into one space, matched on the join code. It needs no server and
-        no accounts, but it is a snapshot, so re-export after adding ads. Live sync
-        between teammates would need a hosted backend.
-      </p>
     </Modal>
   );
 };
@@ -908,6 +1021,31 @@ const App = () => {
       note: agg.contributors.rows.length ? `top: ${agg.contributors.rows[0].label}` : "",
     });
 
+  // Realtime lives in the page, never in the service worker: a worker is
+  // killed after about thirty seconds of idle and would take the socket with
+  // it. Every wake re-pulls regardless, because a socket that was closed while
+  // the page was shut cannot report what it missed.
+  useEffect(() => {
+    if (!space || !space.teamId) return;
+    let stop = () => {};
+    let cancelled = false;
+    const go = async () => {
+      const lists = spaceLists(state);
+      await pull(space, lists, state.ads);
+      if (cancelled) return;
+      stop = await watch(space, () => pull(space, spaceLists(state), state.ads).then(refresh));
+      refresh();
+    };
+    go();
+    return () => {
+      cancelled = true;
+      stop();
+    };
+    // Re-subscribing on every store change would thrash the socket, so this
+    // keys on the team alone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [space && space.teamId]);
+
   const importFile = () => document.getElementById("import-file").click();
 
   // The file input lives outside the React tree so the modal can be closed
@@ -1295,6 +1433,7 @@ const App = () => {
       {modal && modal.kind === "team" && (
         <TeamModal
           space={space}
+          state={state}
           onClose={() => setModal(null)}
           onDone={refresh}
           onImport={importFile}

@@ -356,6 +356,30 @@ const handleSpaceOp = async (msg) => {
   const { spaces, lists, ads, settings } = store;
 
   switch (msg.op) {
+    /**
+     * Bind a local space to a remote team. The space keeps its local id, so
+     * nothing already saved has to move; it just gains the team it belongs to
+     * and the code teammates use to find it.
+     */
+    case "link": {
+      const space = spaces[msg.spaceId];
+      if (!space) return { ok: false, error: "no such space" };
+      space.teamId = msg.teamId;
+      space.code = msg.code || space.code;
+      space.kind = "team";
+      await chrome.storage.local.set({ spaces });
+      return { ok: true, space };
+    }
+
+    /** Record the remote ids a push handed back, so the next one updates. */
+    case "link_lists": {
+      for (const { localId, remoteId } of msg.links || []) {
+        if (lists[localId]) lists[localId].remoteId = remoteId;
+      }
+      await chrome.storage.local.set({ lists });
+      return { ok: true, linked: (msg.links || []).length };
+    }
+
     case "create": {
       const kind = msg.kind === "team" ? "team" : "personal";
       const space = {
@@ -853,6 +877,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           .create({ url: chrome.runtime.getURL("dashboard/dashboard.html") })
           .then(() => ({ ok: true })),
       );
+    case "APPLY_SYNC":
+      return respond(handleApplySync(msg));
     case "OPEN_LIBRARY":
       return respond(openAdLibrary());
     case "OPEN_PANEL":
@@ -915,6 +941,24 @@ const openPanelFor = async (sender) => {
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((err) => console.warn("[pake-ads] side panel behaviour:", err));
+
+/**
+ * Write back a merged team space.
+ *
+ * The merge itself happens in the page, where supabase-js lives, but the write
+ * lands here so every change to the store goes through one place. Only the
+ * space being synced is touched: lists belonging to other spaces are carried
+ * over untouched, or a sync of one space would wipe the rest.
+ */
+const handleApplySync = async ({ spaceId, ads, lists }) => {
+  const store = await ensureBootstrapped();
+  const kept = Object.fromEntries(
+    Object.entries(store.lists).filter(([, l]) => l.spaceId !== spaceId),
+  );
+  const merged = { ...kept, ...lists };
+  await chrome.storage.local.set({ ads, lists: merged });
+  return { ok: true, ads: Object.keys(ads).length, lists: Object.keys(merged).length };
+};
 
 // Keep local state fresh when another device pushes an update.
 chrome.storage.onChanged.addListener((changes, area) => {
