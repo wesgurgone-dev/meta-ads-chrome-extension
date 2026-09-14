@@ -39,22 +39,17 @@
   const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString() : "-");
   const fmtNum = (n) => (n == null ? "-" : Number(n).toLocaleString());
 
-  const daysRunning = (ad) => {
-    if (!ad.startDate) return null;
-    const end = ad.isActive === false && ad.endDate ? ad.endDate : Date.now();
-    return Math.max(1, Math.round((end - ad.startDate) / 86400000));
-  };
+  // Metric parsing, aggregation, and the shared format/longevity rules.
+  const M = globalThis.MalMetrics;
+  const daysRunning = (ad) => M.daysRunning(ad);
+  const adFormat = (ad) => M.adFormat(ad);
 
-  const adFormat = (ad) => {
-    const media = ad.media || [];
-    if (
-      media.filter((m) => m.type !== "video").length > 1 ||
-      ad.displayFormat === "CAROUSEL"
-    )
-      return "carousel";
-    if (media.some((m) => m.type === "video")) return "video";
-    if (media.length > 0) return "image";
-    return "text";
+  /** One ad's range as exact numbers, so the modal shows what was aggregated. */
+  const rangeLabel = (range) => {
+    if (!range) return null;
+    if (range.upper == null) return `${fmtNum(range.lower)}+`;
+    if (range.lower === range.upper) return fmtNum(range.lower);
+    return `${fmtNum(range.lower)} – ${fmtNum(range.upper)}`;
   };
 
   const thumbFor = (ad) => {
@@ -124,7 +119,9 @@
   const render = () => {
     renderSidebar();
     const ads = visibleAds();
-    renderStats(ads);
+    const agg = M.aggregate(ads);
+    renderStats(agg);
+    renderMetrics(agg);
     renderGrid(ads);
     renderBulkbar();
   };
@@ -165,32 +162,272 @@
       .classList.toggle("active", state.activeList === "__all__");
   };
 
-  const renderStats = (ads) => {
-    const advertisers = new Set(ads.map((a) => a.pageId || a.pageName)).size;
-    const active = ads.filter((a) => a.isActive === true).length;
-    const days = ads.map(daysRunning).filter((d) => d != null);
-    const avgDays = days.length
-      ? Math.round(days.reduce((s, d) => s + d, 0) / days.length)
-      : null;
-    const euReach = ads.reduce((s, a) => s + (a.euTotalReach || 0), 0);
-    const withSpend = ads.filter((a) => a.spend).length;
+  /**
+   * Headline tiles. Spend and impressions are ranges, not point values, and
+   * each carries a coverage note saying how many ads reported anything - a
+   * total over 3 of 200 ads must never read like a total over all 200.
+   */
+  const renderStats = (agg) => {
+    const topSpend = agg.spend[0] || null;
+    const spendNote = topSpend
+      ? `${topSpend.count} of ${agg.total} ads${agg.spend.length > 1 ? ` · +${agg.spend.length - 1} more currency` : ""}`
+      : "not disclosed for these ads";
+    const imprNote = agg.impressions
+      ? `${agg.impressions.count} of ${agg.total} ads`
+      : "not disclosed for these ads";
+
     const stats = [
-      { label: "Ads in view", value: fmtNum(ads.length) },
-      { label: "Advertisers", value: fmtNum(advertisers) },
-      { label: "Active now", value: fmtNum(active) },
+      { label: "Ads in view", value: fmtNum(agg.total) },
+      { label: "Advertisers", value: fmtNum(agg.advertiserCount) },
+      { label: "Active now", value: fmtNum(agg.active) },
+      {
+        label: `Total spend${topSpend ? ` (${topSpend.currency})` : ""}`,
+        value: topSpend ? M.formatRange(topSpend, "") : "-",
+        note: spendNote,
+        range: true,
+      },
+      {
+        label: "Total impressions",
+        value: agg.impressions ? M.formatRange(agg.impressions, "") : "-",
+        note: imprNote,
+        range: true,
+      },
+      {
+        label: "EU reach",
+        value: agg.euReach ? M.compact(agg.euReach) : "-",
+        note: agg.euReachCount
+          ? `${agg.euReachCount} of ${agg.total} ads`
+          : "EU-delivered ads only",
+      },
+      {
+        label: "Saved this week",
+        value: fmtNum(agg.saves.week),
+        note: `${agg.saves.today} today · ${agg.saves.month} in 30d`,
+      },
       {
         label: "Avg days running",
-        value: avgDays == null ? "-" : fmtNum(avgDays),
+        value: agg.avgDaysRunning == null ? "-" : fmtNum(agg.avgDaysRunning),
+        note: agg.maxDaysRunning
+          ? `longest ${fmtNum(agg.maxDaysRunning)}d`
+          : "",
       },
-      { label: "EU reach (total)", value: euReach ? fmtNum(euReach) : "-" },
-      { label: "With spend data", value: fmtNum(withSpend) },
     ];
+
     $("#stats").innerHTML = stats
       .map(
-        (s) => `<div class="stat"><div class="stat-value">${s.value}</div>
-                <div class="stat-label">${s.label}</div></div>`,
+        (s) => `<div class="stat">
+          <div class="stat-value${s.range ? " range" : ""}">${escapeHtml(s.value)}</div>
+          <div class="stat-label">${escapeHtml(s.label)}</div>
+          ${s.note ? `<div class="stat-note">${escapeHtml(s.note)}</div>` : ""}
+        </div>`,
       )
       .join("");
+  };
+
+  // -------------------------------------------------------------------
+  // Metrics panel
+  // -------------------------------------------------------------------
+
+  const tip = (() => {
+    let el = null;
+    return {
+      show(e, html) {
+        if (!el) {
+          el = document.createElement("div");
+          el.id = "viz-tip";
+          document.body.appendChild(el);
+        }
+        el.innerHTML = html;
+        el.classList.add("visible");
+        const pad = 12;
+        const rect = el.getBoundingClientRect();
+        let x = e.clientX + pad;
+        if (x + rect.width > window.innerWidth - pad)
+          x = e.clientX - rect.width - pad;
+        el.style.left = `${Math.max(pad, x)}px`;
+        el.style.top = `${Math.max(pad, e.clientY - rect.height - pad)}px`;
+      },
+      hide() {
+        if (el) el.classList.remove("visible");
+      },
+    };
+  })();
+
+  const attachTip = (node, html) => {
+    node.addEventListener("mousemove", (e) => tip.show(e, html));
+    node.addEventListener("mouseleave", () => tip.hide());
+  };
+
+  /** Horizontal bars: one hue, magnitude by length, value at the tip. */
+  const barChart = (title, sub, rows, footer) => {
+    const wrap = document.createElement("div");
+    wrap.className = "viz";
+    wrap.innerHTML = `<div class="viz-title">${escapeHtml(title)}</div>
+      <div class="viz-sub">${escapeHtml(sub)}</div>`;
+    if (rows.length === 0) {
+      wrap.insertAdjacentHTML(
+        "beforeend",
+        '<div class="viz-empty">No data yet.</div>',
+      );
+      return wrap;
+    }
+    const max = Math.max(...rows.map((r) => r.value), 1);
+    for (const row of rows) {
+      const el = document.createElement("div");
+      el.className = "bar-row";
+      el.innerHTML = `
+        <div class="bar-label" title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(row.value / max) * 100}%"></div></div>
+        <div class="bar-value">${escapeHtml(M.compact(row.value))}</div>`;
+      attachTip(
+        el,
+        `<strong>${escapeHtml(row.label)}</strong><br>${fmtNum(row.value)} ad${row.value === 1 ? "" : "s"}`,
+      );
+      wrap.appendChild(el);
+    }
+    if (footer)
+      wrap.insertAdjacentHTML(
+        "beforeend",
+        `<div class="viz-sub" style="margin-top:8px">${escapeHtml(footer)}</div>`,
+      );
+    return wrap;
+  };
+
+  /** Saves per day: single series over time, so no legend. */
+  const savesChart = (timeline) => {
+    const wrap = document.createElement("div");
+    wrap.className = "viz";
+    const total = timeline.reduce((s, d) => s + d.value, 0);
+    wrap.innerHTML = `<div class="viz-title">Saves per day</div>
+      <div class="viz-sub">${fmtNum(total)} saved in the last 30 days</div>`;
+    const chart = document.createElement("div");
+    chart.className = "col-chart";
+    const max = Math.max(...timeline.map((d) => d.value), 1);
+    for (const d of timeline) {
+      const slot = document.createElement("div");
+      slot.className = "col-slot";
+      const h = d.value === 0 ? 2 : Math.max(4, (d.value / max) * 88);
+      slot.innerHTML = `<div class="col-fill${d.value === 0 ? " zero" : ""}" style="height:${h}px"></div>`;
+      attachTip(
+        slot,
+        `<strong>${new Date(d.ms).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</strong><br>${fmtNum(d.value)} saved`,
+      );
+      chart.appendChild(slot);
+    }
+    wrap.appendChild(chart);
+    const first = timeline[0];
+    const last = timeline[timeline.length - 1];
+    const fmtTick = (ms) =>
+      new Date(ms).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      });
+    wrap.insertAdjacentHTML(
+      "beforeend",
+      `<div class="col-axis"><span>${escapeHtml(fmtTick(first.ms))}</span><span>${escapeHtml(fmtTick(last.ms))}</span></div>`,
+    );
+    return wrap;
+  };
+
+  /** Part-to-whole: categorical segments, always with a labelled legend. */
+  const stackChart = (title, sub, rows) => {
+    const wrap = document.createElement("div");
+    wrap.className = "viz";
+    wrap.innerHTML = `<div class="viz-title">${escapeHtml(title)}</div>
+      <div class="viz-sub">${escapeHtml(sub)}</div>`;
+    const total = rows.reduce((s, r) => s + r.value, 0);
+    if (total === 0) {
+      wrap.insertAdjacentHTML(
+        "beforeend",
+        '<div class="viz-empty">No data yet.</div>',
+      );
+      return wrap;
+    }
+    const stack = document.createElement("div");
+    stack.className = "stack";
+    rows.forEach((row, i) => {
+      if (row.value === 0) return;
+      const seg = document.createElement("div");
+      seg.className = "stack-seg";
+      seg.style.flex = String(row.value);
+      seg.style.background = `var(--series-${i + 1})`;
+      const pct = Math.round((row.value / total) * 100);
+      attachTip(
+        seg,
+        `<strong>${escapeHtml(row.label)}</strong><br>${fmtNum(row.value)} ads · ${pct}%`,
+      );
+      stack.appendChild(seg);
+    });
+    wrap.appendChild(stack);
+    // Legend carries identity and the values, so color is never the only cue.
+    wrap.insertAdjacentHTML(
+      "beforeend",
+      `<div class="legend">${rows
+        .map(
+          (row, i) =>
+            `<span class="legend-item">
+               <span class="legend-dot" style="background:var(--series-${i + 1})"></span>
+               ${escapeHtml(row.label)}
+               <span class="legend-value">${fmtNum(row.value)}</span>
+             </span>`,
+        )
+        .join("")}</div>`,
+    );
+    return wrap;
+  };
+
+  const renderMetrics = (agg) => {
+    const body = $("#metrics-body");
+    body.innerHTML = "";
+    if (agg.total === 0) {
+      body.innerHTML =
+        '<div class="viz-empty">Save some ads to see metrics.</div>';
+      return;
+    }
+
+    body.appendChild(savesChart(agg.saves.timeline));
+
+    body.appendChild(
+      barChart(
+        "Top advertisers",
+        "saved ads per advertiser",
+        agg.advertisers.rows,
+        agg.advertisers.otherCount
+          ? `+ ${agg.advertisers.otherCount} more advertisers (${agg.advertisers.otherValue} ads)`
+          : "",
+      ),
+    );
+
+    body.appendChild(
+      stackChart("Format mix", "share of saved ads by creative type", [
+        { label: "Video", value: agg.formatCounts.video },
+        { label: "Image", value: agg.formatCounts.image },
+        { label: "Carousel", value: agg.formatCounts.carousel },
+        { label: "Text only", value: agg.formatCounts.text },
+      ]),
+    );
+
+    body.appendChild(
+      barChart(
+        "Placements",
+        "ads running on each platform",
+        agg.platformCounts.rows,
+        "",
+      ),
+    );
+
+    // Spend needs its own block when more than one currency is in view:
+    // summing across currencies would be meaningless.
+    if (agg.spend.length > 1) {
+      body.appendChild(
+        barChart(
+          "Spend by currency",
+          "lower bound of each disclosed range",
+          agg.spend.map((s) => ({ label: s.currency, value: s.lower })),
+          "Meta discloses spend only as a range, and only for political and social-issue ads.",
+        ),
+      );
+    }
   };
 
   const renderGrid = (ads) => {
@@ -309,7 +546,9 @@
       ["Format", adFormat(ad)],
       ["Variations (collation)", ad.collationCount],
       ["Spend", ad.spend ? `${ad.spend} ${ad.currency || ""}` : null],
+      ["Spend (parsed)", rangeLabel(M.adSpendRange(ad))],
       ["Impressions", ad.impressionsText],
+      ["Impressions (parsed)", rangeLabel(M.adImpressionsRange(ad))],
       [
         "EU total reach",
         ad.euTotalReach != null ? fmtNum(ad.euTotalReach) : null,
@@ -509,8 +748,12 @@
       "platforms",
       "format",
       "spend",
+      "spendLower",
+      "spendUpper",
       "currency",
       "impressionsText",
+      "impressionsLower",
+      "impressionsUpper",
       "euTotalReach",
       "byline",
       "collationCount",
@@ -519,6 +762,7 @@
       "ctaText",
       "linkUrl",
       "libraryUrl",
+      "savedAt",
     ];
     const cell = (v) =>
       `"${String(v ?? "")
@@ -536,6 +780,8 @@
               return cell(
                 ad[c] ? new Date(ad[c]).toISOString().slice(0, 10) : "",
               );
+            if (c === "savedAt")
+              return cell(ad[c] ? new Date(ad[c]).toISOString() : "");
             return cell(ad[c]);
           })
           .join(","),
@@ -575,6 +821,26 @@
       state.selected.clear();
       render();
     });
+  const metricsToggle = $("#metrics-toggle");
+  const applyMetricsCollapsed = (collapsed) => {
+    $("#metrics").classList.toggle("collapsed", collapsed);
+    metricsToggle.textContent = collapsed ? "Show" : "Hide";
+  };
+  metricsToggle.addEventListener("click", () => {
+    const collapsed = !$("#metrics").classList.contains("collapsed");
+    applyMetricsCollapsed(collapsed);
+    try {
+      localStorage.setItem("mal.metricsCollapsed", collapsed ? "1" : "0");
+    } catch (err) {
+      /* storage unavailable; the toggle still works for this session */
+    }
+  });
+  try {
+    applyMetricsCollapsed(localStorage.getItem("mal.metricsCollapsed") === "1");
+  } catch (err) {
+    applyMetricsCollapsed(false);
+  }
+
   $("#btn-new-list").addEventListener("click", createList);
   $("#btn-export-json").addEventListener("click", exportJson);
   $("#btn-export-csv").addEventListener("click", exportCsv);

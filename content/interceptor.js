@@ -93,6 +93,25 @@
     return null;
   };
 
+  /**
+   * Numeric bounds behind a range. Meta publishes spend and impressions only
+   * as ranges, so keeping the raw bounds lets the dashboard total them without
+   * re-parsing a display string. `upper: null` means open-ended ("10M+").
+   */
+  const numericBounds = (raw) => {
+    if (raw == null || typeof raw !== "object")
+      return { lower: null, upper: null };
+    const num = (v) => {
+      if (v == null) return null;
+      const n = Number(String(v).replace(/[,\s]/g, ""));
+      return Number.isFinite(n) ? n : null;
+    };
+    return {
+      lower: num(raw.lower_bound ?? raw.lower),
+      upper: num(raw.upper_bound ?? raw.upper),
+    };
+  };
+
   const normalizeAd = (node) => {
     const snap = node.snapshot || {};
     const ad = {
@@ -117,12 +136,16 @@
       linkUrl: snap.link_url || null,
       linkDescription: text(snap.link_description) || null,
       spend: spendValue(node.spend),
+      spendLower: numericBounds(node.spend).lower,
+      spendUpper: numericBounds(node.spend).upper,
       currency: node.currency || null,
       impressionsText:
         (node.impressions_with_index &&
           node.impressions_with_index.impressions_text) ||
         spendValue(node.impressions) ||
         null,
+      impressionsLower: numericBounds(node.impressions).lower,
+      impressionsUpper: numericBounds(node.impressions).upper,
       euTotalReach: node.eu_total_reach ?? null,
       reachEstimate: spendValue(node.reach_estimate),
       byline: node.byline || null,

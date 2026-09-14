@@ -65,6 +65,16 @@
 
       <section id="stats" class="stats"></section>
 
+      <section id="metrics" class="metrics">
+        <div class="metrics-head">
+          <h2>Metrics</h2>
+          <button id="metrics-toggle" class="btn btn-ghost small" type="button">
+            Hide
+          </button>
+        </div>
+        <div id="metrics-body" class="metrics-body"></div>
+      </section>
+
       <section id="bulkbar" class="bulkbar hidden">
         <span id="bulk-count">0 selected</span>
         <select id="bulk-list-target"></select>
@@ -98,6 +108,7 @@
       <div class="modal-card" id="modal-card"></div>
     </div>
 
+    <script src="metrics.js"></script>
     <script src="dashboard.js"></script>
   </body>
 </html>

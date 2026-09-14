@@ -60,6 +60,12 @@ body {
   letter-spacing: 0.05em;
 }
 
+.stat-note {
+  color: #6f7687;
+  font-size: 9.5px;
+  margin-top: 2px;
+}
+
 .btn {
   font: 600 13px/1 inherit;
   border: none;

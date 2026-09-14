@@ -238,6 +238,237 @@ select:focus {
   letter-spacing: 0.05em;
 }
 
+/* ---------- metrics ----------
+   Viz tokens: the validated dark categorical steps (blue/orange/aqua/yellow),
+   checked against this panel surface with the palette validator. Marks carry
+   the series color; all text stays in the ink tokens. */
+
+.metrics {
+  --viz-surface: #12151d;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --viz-track: #1d2230;
+  --viz-grid: #262b38;
+  --ink-muted: #8a91a3;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px 16px;
+  margin-bottom: 14px;
+}
+
+.metrics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.metrics-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.metrics-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px 22px;
+}
+
+.metrics.collapsed .metrics-body {
+  display: none;
+}
+
+.viz {
+  min-width: 0;
+}
+
+.viz-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.viz-sub {
+  color: var(--ink-muted);
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+
+.viz-empty {
+  color: var(--ink-muted);
+  font-size: 12px;
+  padding: 14px 0;
+}
+
+/* Horizontal bars: magnitude, one hue. Value rides the bar tip. */
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 34%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  /* 2px surface gap separates adjacent bars */
+  margin-bottom: 2px;
+  padding: 2px 0;
+}
+
+.bar-label {
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-track {
+  background: var(--viz-track);
+  border-radius: 0 4px 4px 0;
+  height: 14px;
+  overflow: visible;
+}
+
+.bar-fill {
+  height: 100%;
+  background: var(--series-1);
+  /* square at the baseline, 4px rounded at the data end */
+  border-radius: 0 4px 4px 0;
+  min-width: 2px;
+}
+
+.bar-value {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Columns: saves per day over the last 30 days, single series. */
+
+.col-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px; /* the surface gap between adjacent columns */
+  height: 88px;
+  border-bottom: 1px solid var(--viz-grid);
+  padding-bottom: 0;
+}
+
+.col-slot {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  cursor: default;
+}
+
+.col-fill {
+  width: 100%;
+  max-width: 24px;
+  margin: 0 auto;
+  background: var(--series-1);
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+}
+
+.col-fill.zero {
+  background: var(--viz-track);
+  min-height: 2px;
+}
+
+.col-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-muted);
+  font-size: 10px;
+  margin-top: 6px;
+}
+
+/* Stacked bar: part-to-whole, categorical + legend with values. */
+
+.stack {
+  display: flex;
+  gap: 2px; /* surface gap between segments */
+  height: 18px;
+  margin-bottom: 10px;
+}
+
+.stack-seg {
+  border-radius: 2px;
+  min-width: 2px;
+}
+
+.stack-seg:first-child {
+  border-radius: 4px 2px 2px 4px;
+}
+
+.stack-seg:last-child {
+  border-radius: 2px 4px 4px 2px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.legend-value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shared hover tooltip for every mark in the panel. */
+
+#viz-tip {
+  position: fixed;
+  z-index: 200;
+  background: #0a0c11;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 11.5px;
+  color: var(--text);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+#viz-tip.visible {
+  opacity: 1;
+}
+
+/* Range values need room to breathe in a tile. */
+
+.stat-value.range {
+  font-size: 16px;
+}
+
+.stat-note {
+  color: var(--ink-muted, #8a91a3);
+  font-size: 10.5px;
+  margin-top: 3px;
+}
+
 /* ---------- bulk bar ---------- */
 
 .bulkbar {
