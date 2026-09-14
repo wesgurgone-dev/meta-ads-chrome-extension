@@ -6,7 +6,7 @@
  *             kind is 'personal' or 'team'; team spaces carry a join code.
  *   lists:    { [listId]: { id, spaceId, name, color, adIds[], createdAt } }
  *   ads:      { [adId]: normalizedAd & { savedAt, savedBy, thumbDataUrl? } }
- *   settings: { activeSpaceId, syncEnabled, captureFrames }
+ *   settings: { activeSpaceId, syncEnabled, captureFrames, fastScoring }
  *   identity: { userId, displayName }
  *   frames_<adId>: { v, adId, source, duration, frames[{t, dataUrl}], error? }
  *   frameQueue: [{ adId, url, source }] - pending video frame extractions
@@ -221,14 +221,21 @@ let offscreenReady = null;
 let offscreenCloseTimer = null;
 let framesPumping = false;
 
-/** The best video URL on an ad, and how good it is, so a low-res capture can be
- *  redone when the HD record arrives later. */
+/**
+ * The video to decode frames from - the SD stream by preference.
+ *
+ * Downloads still take the HD file; this is only for scoring, where frames are
+ * drawn at 768px and an HD source is several times the bytes for pixels that
+ * are thrown away before the model ever sees them. The whole file has to come
+ * down before the first frame can be decoded, so this is the largest single
+ * saving in the time between saving an ad and seeing its score.
+ */
 const pickVideoSource = (ad) => {
   for (const m of ad.media || []) {
     if (m.type !== "video") continue;
-    if (m.hdUrl && /^https?:/.test(m.hdUrl)) return { url: m.hdUrl, source: "hd" };
     if (m.sdUrl && /^https?:/.test(m.sdUrl)) return { url: m.sdUrl, source: "sd" };
     if (m.url && /^https?:/.test(m.url)) return { url: m.url, source: "sd" };
+    if (m.hdUrl && /^https?:/.test(m.hdUrl)) return { url: m.hdUrl, source: "hd" };
   }
   return null;
 };
@@ -431,13 +438,10 @@ const handleSaveAds = async (incoming, listId) => {
       const video = pickVideoSource(ad);
       if (video) toFrames.push({ adId: ad.id, ...video });
     } else {
-      // A card first saved from the DOM carries a low-res video; the GraphQL
-      // record arriving later upgrades it, and frames taken from the low-res
-      // copy would otherwise stay permanent.
-      const before = pickVideoSource(ads[ad.id]);
-      const after = pickVideoSource(ad);
-      if (after && after.source === "hd" && (!before || before.source !== "hd"))
-        toFrames.push({ adId: ad.id, ...after });
+      // A repeat capture is not re-framed. Frames are drawn at 768px from the SD
+      // stream, so a later HD record would cost a second full download for
+      // pixels that are discarded before the model sees them.
+      /* volatile fields are refreshed below; frames stay as captured */
       // Refresh volatile fields (media URLs, active state), keep provenance.
       ads[ad.id] = {
         ...ads[ad.id],
@@ -1260,7 +1264,14 @@ const scoringContext = async () => {
 
   const { spaces, settings } = await getStore();
   const space = spaces[settings.activeSpaceId];
-  return { url, anonKey, token, teamId: (space && space.teamId) || null };
+  return {
+    url,
+    anonKey,
+    token,
+    teamId: (space && space.teamId) || null,
+    // Same model, up to 2.5x the output rate, at roughly double the price.
+    fast: settings.fastScoring === true,
+  };
 };
 
 let scorePumping = false;
@@ -1297,66 +1308,89 @@ const enqueueScores = async (adIds) => {
  * bad reply or an ad with nothing to look at is that ad's problem, so it is
  * recorded against the ad and the queue carries on.
  */
+/**
+ * How many ads are scored at once.
+ *
+ * The queue used to be strictly serial, so saving ten ads meant ten round trips
+ * end to end and the last card stayed blank for minutes. These are independent
+ * requests against a remote service; the limit that matters is the upstream
+ * rate limit, not anything local.
+ */
+const SCORE_CONCURRENCY = 3;
+
+/** One ad. Returns "done", "drop", or a blocking failure code. */
+const scoreOne = async (adId, ctx) => {
+  const { ads } = await getStore();
+  const ad = ads[adId];
+  if (!ad) return "drop";
+
+  // Somebody on the team may already have paid for this one.
+  const shared = await readRemoteScore({ ...ctx, adId });
+  if (shared) {
+    await handleScoreSave(shared);
+    return "drop";
+  }
+
+  const frames = await getFrames(adId);
+  const res = await scoreAdWithProxy(ad, { frames, ...ctx });
+
+  if (res.ok) {
+    await handleScoreSave(res.score);
+    await writeRemoteScore({ ...ctx, score: res.score });
+    return "done";
+  }
+  if (isBlocking(res.code)) return res.code;
+
+  // This ad cannot be scored. Record why against it, so the card shows a reason
+  // rather than staying blank forever and looking like a queue that never ran.
+  await handleScoreSave({
+    adId,
+    rubricVersion: null,
+    failed: res.code,
+    error: failureMessage(res.code, res.detail),
+    createdAt: Date.now(),
+  });
+  return "drop";
+};
+
 const pumpScores = async () => {
   if (scorePumping) return;
   scorePumping = true;
+  const inFlight = new Set();
   try {
     for (;;) {
       const { scoreQueue = [] } = await chrome.storage.local.get("scoreQueue");
-      const adId = scoreQueue[0];
-      if (!adId) {
+      const next = scoreQueue.filter((id) => !inFlight.has(id)).slice(0, SCORE_CONCURRENCY);
+      if (!next.length) {
         await setScoreBlock(null);
         break;
-      }
-
-      const { ads } = await getStore();
-      const ad = ads[adId];
-      if (!ad) {
-        await dropFromScoreQueue(adId);
-        continue;
       }
 
       const ctx = await scoringContext();
-      if (!ctx.token) {
-        await setScoreBlock(FAILURE.SIGNED_OUT);
+      for (const id of next) inFlight.add(id);
+      const outcomes = await Promise.all(
+        next.map((id) =>
+          scoreOne(id, ctx).catch((err) => {
+            console.warn("[pake-ads] scoring", id, err);
+            return "drop";
+          }),
+        ),
+      );
+      for (const id of next) inFlight.delete(id);
+
+      // Every ad that resolved leaves the queue either way: a blocking failure
+      // is about the connection rather than about these ads, and the ones that
+      // did score must not be scored twice when the queue restarts.
+      for (let i = 0; i < next.length; i++)
+        if (outcomes[i] === "done" || outcomes[i] === "drop")
+          await dropFromScoreQueue(next[i]);
+
+      const blocked = outcomes.find((o) => o !== "done" && o !== "drop");
+      if (blocked) {
+        await setScoreBlock(blocked);
         break;
       }
-
-      // Somebody on the team may already have paid for this one.
-      const shared = await readRemoteScore({ ...ctx, adId });
-      if (shared) {
-        await handleScoreSave(shared);
-        await dropFromScoreQueue(adId);
-        continue;
-      }
-
-      const frames = await getFrames(adId);
-      const res = await scoreAdWithProxy(ad, { frames, ...ctx });
-
-      if (res.ok) {
-        await handleScoreSave(res.score);
-        await writeRemoteScore({ ...ctx, score: res.score });
-        await dropFromScoreQueue(adId);
-        await setScoreBlock(null);
-        continue;
-      }
-
-      if (isBlocking(res.code)) {
-        await setScoreBlock(res.code, res.detail);
-        break;
-      }
-
-      // This ad cannot be scored. Record why against it, so the card shows a
-      // reason rather than staying blank forever and looking like a queue that
-      // never ran.
-      await handleScoreSave({
-        adId,
-        rubricVersion: null,
-        failed: res.code,
-        error: failureMessage(res.code, res.detail),
-        createdAt: Date.now(),
-      });
-      await dropFromScoreQueue(adId);
+      await setScoreBlock(null);
     }
   } finally {
     scorePumping = false;
@@ -1476,6 +1510,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return respond(handleSetTheme(msg.theme));
     case "SET_DOWNLOAD_FOLDER":
       return respond(handleSetDownloadFolder(msg.mode));
+    case "SET_FAST_SCORING":
+      return respond(
+        getStore().then(async ({ settings }) => {
+          settings.fastScoring = !!msg.enabled;
+          await chrome.storage.local.set({ settings });
+          return { ok: true };
+        }),
+      );
     case "SET_CAPTURE_FRAMES":
       return respond(
         getStore().then(async ({ settings }) => {

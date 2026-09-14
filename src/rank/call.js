@@ -18,7 +18,7 @@ import { RUBRIC, RUBRIC_VERSION } from "./rubric.js";
 import { SCORE_SCHEMA, overallScore, validateScore } from "./schema.js";
 
 export const MODEL = "claude-opus-5";
-const MAX_FRAMES = 8;
+const MAX_FRAMES = 5;
 
 /**
  * The ad's own words. The cheapest available fix for the utility axis being
@@ -121,7 +121,9 @@ export const failureMessage = (code, detail) => {
     case FAILURE.NOT_DEPLOYED:
       return "The scoring function is not deployed yet. Run: supabase functions deploy claude";
     case FAILURE.SIGNED_OUT:
-      return "Sign in under Settings to score ads.";
+      // Two different fixes, and which one applies is the project owner's
+      // choice rather than something this end can work out.
+      return "The scoring function refused the request. Either sign in under Settings, or allow signed-out use: supabase secrets set ALLOW_ANON=true";
     case FAILURE.RATE_LIMITED:
       return "The daily scoring limit has been reached.";
     case FAILURE.NOTHING_TO_SEE:
@@ -143,29 +145,50 @@ export const failureMessage = (code, detail) => {
  * `url` and `token` are the Supabase project URL and the caller's access token,
  * both read from storage by the worker.
  */
-export const scoreAd = async (ad, { frames, url, token, teamId = null, model = MODEL }) => {
+export const scoreAd = async (
+  ad,
+  { frames, url, anonKey, token, teamId = null, model = MODEL, fast = false },
+) => {
+  const startedAt = Date.now();
   const seen = collectImages(ad, frames);
   if (!seen.images.length)
     return { ok: false, code: FAILURE.NOTHING_TO_SEE, detail: seen.note };
   if (!url) return { ok: false, code: FAILURE.SIGNED_OUT };
-  if (!token) return { ok: false, code: FAILURE.SIGNED_OUT };
+  // Signed out, the publishable key is the credential. The function only
+  // honours it when its own ALLOW_ANON secret is set, so this cannot widen
+  // access from the client side.
+  const bearer = token || anonKey;
+  if (!bearer) return { ok: false, code: FAILURE.SIGNED_OUT };
 
   let res;
   try {
     res = await fetch(`${url}/functions/v1/claude`, {
       method: "POST",
-      headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${bearer}`,
+        apikey: anonKey || "",
+      },
       body: JSON.stringify({
         model,
         // Blocks, not a string: cache_control is what makes the frozen rubric a
         // cached prefix instead of a few thousand tokens paid for per ad.
         system: [{ type: "text", text: RUBRIC, cache_control: { type: "ephemeral" } }],
         messages: buildMessages(ad, seen),
-        // Thinking is on by default and counts against this ceiling, so a
-        // number sized for the JSON alone truncates mid-object.
-        max_tokens: 4000,
+        // Thinking is on by default on this model and counts against the
+        // ceiling, so this is sized for a short reasoning pass plus the JSON -
+        // not for the JSON alone, which would truncate mid-object.
+        max_tokens: 1500,
         thinking: { type: "adaptive" },
-        output_config: { effort: "medium", format: { type: "json_schema", schema: SCORE_SCHEMA } },
+        // Low, not medium. This is a bounded judgement against a rubric that
+        // already does the reasoning: the anchors, the band-before-number
+        // ordering and the anti-7 rule are what hold the scale, not thinking
+        // depth. Effort is the difference between a score arriving while the
+        // user is still looking at the ad and arriving a minute later.
+        output_config: { effort: "low", format: { type: "json_schema", schema: SCORE_SCHEMA } },
+        // Same model, up to 2.5x the output rate, at premium pricing. Off by
+        // default because it costs double.
+        ...(fast ? { fast: true } : {}),
         teamId,
       }),
     });
@@ -223,6 +246,10 @@ export const scoreAd = async (ad, { frames, url, token, teamId = null, model = M
       frames: seen.images.length,
       frameKind: seen.kind,
       usage: reply.usage || null,
+      // How long the call itself took. "Scoring is slow" is otherwise an
+      // impression; this makes it a number, and separates the model's time
+      // from the frame extraction that runs before it.
+      ms: Date.now() - startedAt,
       // A band that disagrees with its score is a rubric problem, and it travels
       // with the row rather than being retried away.
       problems: check.ok ? null : check.problems,

@@ -531,6 +531,19 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
     };
   });
   ok(settings.found, 'frame capture is a setting, not a silent default');
+  const gating = await dash.evaluate(() => {
+    const rows = [...document.querySelectorAll('.toggle-row')].map((r) =>
+      r.innerText.replace(/\s+/g, ' '));
+    return {
+      signIn: rows.find((t) => /Sign in/.test(t)) || '',
+      fast: rows.find((t) => /Faster scoring/.test(t)) || '',
+    };
+  });
+  ok(/optional/i.test(gating.signIn),
+     `sign-in is marked optional, because nothing but teams needs it: ${gating.signIn.slice(0, 60)}`);
+  ok(/team spaces/i.test(gating.signIn), 'and says what does need it');
+  ok(/2.5x/.test(gating.fast) && /double the price/.test(gating.fast),
+     'fast scoring states both what it buys and what it costs');
   ok(settings.on === true, 'on by default, because scoring is useless without it');
   ok(/signed and stop working within hours/.test(settings.says),
      'and it says why it cannot wait until you click Score');

@@ -858,9 +858,11 @@ const TeamSync = () => {
 
       <div className="toggle-row">
         <div className="toggle-text">
-          <div><strong>{status && status.signedIn ? "Signed in" : "Sign in"}</strong></div>
+          <div><strong>{status && status.signedIn ? "Signed in" : "Sign in (optional)"}</strong></div>
           <div className="toggle-sub">
-            A six-digit code by email. No password, and no redirect to register.
+            Nothing needs this except team spaces, which need an identity to
+            attach rows to. Saving, scoring, discovery and workflows all run
+            signed out. A six-digit code by email; no password.
           </div>
         </div>
       </div>
@@ -978,6 +980,26 @@ const SettingsModal = ({ state, onClose, onDone }) => {
             onDone();
           }}
           aria-label="Sync across devices"
+        />
+      </div>
+
+      <div className="toggle-row">
+        <div className="toggle-text">
+          <div><strong>Faster scoring</strong></div>
+          <div className="toggle-sub">
+            Runs the same model at up to 2.5x the output rate, for roughly double
+            the price per ad. Worth it while you are watching a score land;
+            wasteful on a bulk re-score.
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={state.settings.fastScoring === true}
+          onChange={async (e) => {
+            await send({ type: "SET_FAST_SCORING", enabled: e.target.checked });
+            onDone();
+          }}
+          aria-label="Faster scoring"
         />
       </div>
 

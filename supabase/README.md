@@ -64,6 +64,28 @@ constraint. Without it the same creative arrives once per teammate.
 was removed still holds it, and on its next push it would helpfully put it
 back. Tombstones also give undo for free.
 
+## Testing without sign-in
+
+`ALLOW_ANON=true` lets the Edge Function answer callers who hold only the
+publishable key, so scoring and workflow generation work with nobody signed in.
+
+```
+supabase secrets set ALLOW_ANON=true
+supabase functions deploy claude --no-verify-jwt
+```
+
+Two things this costs, both worth knowing before turning it on:
+
+- **The publishable key ships in the extension**, so anyone who installs it can
+  spend the Anthropic budget behind that function. Set a spend limit in the
+  Anthropic console while this is on.
+- **There is no meter.** `public.ai_usage` counts per `auth.uid()`, and an
+  anonymous caller has none, so the per-day ceiling does not apply to them.
+
+Turn it off with `supabase secrets unset ALLOW_ANON` and redeploy. Team spaces
+are unaffected either way: they need a real user, because every row is scoped
+through `auth.uid()` by the row policies.
+
 ## Known issue: the six-digit code does not arrive
 
 **Confirmed.** The email is delivered; it just contains a link instead of a

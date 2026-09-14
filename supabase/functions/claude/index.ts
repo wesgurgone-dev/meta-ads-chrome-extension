@@ -10,6 +10,10 @@
  *   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
  *   supabase functions deploy claude
  *
+ * Testing without sign-in (see ALLOW_ANON below before using it):
+ *   supabase secrets set ALLOW_ANON=true
+ *   supabase functions deploy claude --no-verify-jwt
+ *
  * The key is set as a secret and read from the environment. It is never
  * returned, logged, or echoed in an error.
  */
@@ -66,9 +70,22 @@ Deno.serve(async (req: Request) => {
     { global: { headers: { Authorization: authHeader } } },
   );
 
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  const user = userData?.user;
-  if (userError || !user) return json({ error: "Sign in first." }, 401);
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData?.user ?? null;
+
+  // Signed-out access, for a testing phase.
+  //
+  // Off unless the project owner sets ALLOW_ANON=true as a secret, so the
+  // extension cannot turn it on: the switch lives on the server, with whoever
+  // pays the Anthropic bill. While it is on, anyone holding the publishable key
+  // - which ships in the extension and is readable by anyone who installs it -
+  // can spend that bill. There is also no per-caller meter without a user, so
+  // `public.ai_usage` records nothing and the only ceiling is the one set in
+  // the Anthropic console. Turn it off before this is in anyone else's hands:
+  //   supabase secrets unset ALLOW_ANON
+  const allowAnon = (Deno.env.get("ALLOW_ANON") || "").toLowerCase() === "true";
+  if (!user && !allowAnon)
+    return json({ error: "Sign in first." }, 401);
 
   let body: Record<string, unknown>;
   try {
@@ -77,7 +94,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Body must be JSON." }, 400);
   }
 
-  const { model, messages, system, max_tokens, thinking, output_config, teamId } =
+  const { model, messages, system, max_tokens, thinking, output_config, fast, teamId } =
     body as {
       model?: string;
       // A string, or content blocks - blocks are what carries cache_control, and
@@ -87,6 +104,7 @@ Deno.serve(async (req: Request) => {
       max_tokens?: number;
       thinking?: unknown;
       output_config?: unknown;
+      fast?: boolean;
       teamId?: string;
     };
 
@@ -102,8 +120,10 @@ Deno.serve(async (req: Request) => {
     return json({ error: `at most ${LIMITS.maxImages} images per call` }, 400);
 
   // A caller naming a team must actually be in it. Membership is checked by
-  // reading through the caller's own JWT, so RLS does the work.
-  if (teamId) {
+  // reading through the caller's own JWT, so RLS does the work. Signed out
+  // there is no membership to check and no team rows to reach, so a teamId is
+  // simply ignored rather than trusted.
+  if (teamId && user) {
     const { data: member } = await supabase
       .from("team_members")
       .select("team_id")
@@ -113,10 +133,18 @@ Deno.serve(async (req: Request) => {
   }
 
   // Metering. A failure to record is not a reason to refuse the call, but a
-  // caller already over the ceiling is.
-  const { data: used } = await supabase.rpc("ai_usage_today");
-  if (typeof used === "number" && used >= LIMITS.perDay)
-    return json({ error: `Daily limit of ${LIMITS.perDay} calls reached.` }, 429);
+  // caller already over the ceiling is. The meter is keyed on auth.uid(), so
+  // there is nothing to count for an anonymous caller - see ALLOW_ANON above.
+  if (user) {
+    const { data: used } = await supabase.rpc("ai_usage_today");
+    if (typeof used === "number" && used >= LIMITS.perDay)
+      return json({ error: `Daily limit of ${LIMITS.perDay} calls reached.` }, 429);
+  }
+
+  // Fast mode is the same model at up to 2.5x the output rate, at roughly
+  // double the price. It needs the beta endpoint, the beta header and a
+  // top-level speed parameter - all three, or it is silently ignored.
+  const wantFast = fast === true && model === "claude-opus-5";
 
   const upstream = await fetch(ANTHROPIC_URL, {
     method: "POST",
@@ -124,6 +152,7 @@ Deno.serve(async (req: Request) => {
       "content-type": "application/json",
       "x-api-key": apiKey,
       "anthropic-version": ANTHROPIC_VERSION,
+      ...(wantFast ? { "anthropic-beta": "fast-mode-2026-02-01" } : {}),
     },
     body: JSON.stringify({
       model,
@@ -134,6 +163,7 @@ Deno.serve(async (req: Request) => {
       // Structured output and effort. Forwarded rather than constructed here so
       // the rubric and its schema stay in one place, versioned together.
       ...(output_config ? { output_config } : {}),
+      ...(wantFast ? { speed: "fast" } : {}),
     }),
   });
 
@@ -145,7 +175,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: `Upstream error ${upstream.status}` }, 502);
   }
 
-  await supabase.rpc("ai_usage_record", { tokens: text.length });
+  if (user) await supabase.rpc("ai_usage_record", { tokens: text.length });
 
   return new Response(text, {
     status: 200,

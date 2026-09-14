@@ -20,9 +20,10 @@
  * a service worker dying mid-batch loses nothing already captured.
  */
 
-const FRAME_LONG_EDGE = 1024;
+const FRAME_LONG_EDGE = 768;
 const FRAME_QUALITY = 0.72;
 const MAX_VIDEO_BYTES = 48 * 1024 * 1024;
+const MAX_FRAMES = 5;
 const SEEK_TIMEOUT_MS = 8000;
 const LOAD_TIMEOUT_MS = 25000;
 const FRAMES_VERSION = 1;
@@ -32,8 +33,12 @@ const FRAMES_VERSION = 1;
  * is dense; two late frames are enough to see how it resolves.
  */
 const sampleTimes = (duration) => {
-  const early = [0, 0.5, 1, 1.5, 2.5, 4];
-  const late = [duration * 0.6, duration * 0.9];
+  // Five, not eight. Each frame is a seek to wait on and a few hundred input
+  // tokens to prefill, and the axes this feeds are a hook read in the first
+  // seconds plus a craft judgement any few frames support. The eighth frame
+  // changed almost no scores and cost real time on every saved ad.
+  const early = [0, 0.8, 2];
+  const late = [duration * 0.55, duration * 0.9];
   const seen = new Set();
   const out = [];
   for (const t of [...early, ...late]) {
@@ -45,7 +50,7 @@ const sampleTimes = (duration) => {
     seen.add(key);
     out.push(Math.min(t, Math.max(0, duration - 0.05)));
   }
-  return out.sort((a, b) => a - b);
+  return out.sort((a, b) => a - b).slice(0, MAX_FRAMES);
 };
 
 const once = (target, event, timeoutMs, label) =>

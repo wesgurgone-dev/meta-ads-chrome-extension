@@ -143,7 +143,10 @@ ok(
   /supabase functions deploy claude/.test(failureMessage(FAILURE.NOT_DEPLOYED)),
   "the 404 names the command that fixes it, rather than reading as a broken feature",
 );
-ok(/Sign in/.test(failureMessage(FAILURE.SIGNED_OUT)), "and being signed out says so");
+// Two different fixes, and the message has to name both: signing in, or the
+// server-side switch that allows signed-out use.
+ok(/sign in/i.test(failureMessage(FAILURE.SIGNED_OUT)), "a refused request offers signing in");
+ok(/ALLOW_ANON/.test(failureMessage(FAILURE.SIGNED_OUT)), "and the switch that removes the need to");
 
 console.log("\n--- what the model is shown ---");
 const jpeg = "data:image/jpeg;base64,AAECAw==";

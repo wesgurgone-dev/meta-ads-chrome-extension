@@ -27,11 +27,15 @@ export const ask = async ({
   thinking = { type: "adaptive" },
   outputConfig = null,
 }) => {
-  const { url } = await loadConfig();
+  const { url, anonKey } = await loadConfig();
   if (!url) return { ok: false, error: "Supabase is not configured yet." };
 
+  // Signed out, the publishable key is the credential. The Edge Function only
+  // honours it when its own ALLOW_ANON secret is set, so nothing here can widen
+  // access from the client.
   const session = await getSession();
-  if (!session) return { ok: false, error: "Sign in first." };
+  const bearer = (session && session.access_token) || anonKey;
+  if (!bearer) return { ok: false, error: "This project is not configured." };
 
   let res;
   try {
@@ -39,7 +43,8 @@ export const ask = async ({
       method: "POST",
       headers: {
         "content-type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${bearer}`,
+        apikey: anonKey || "",
       },
       body: JSON.stringify({
         model,
