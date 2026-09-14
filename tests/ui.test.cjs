@@ -16,13 +16,33 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { c ? pass++ : fail++; console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); };
 
 const ids = ['853222324181295', '853222324181296'];
+
+/**
+ * Mirrors a real Ad Library card closely enough to test the DOM scrape: the
+ * status word, the printed Library ID, the "Started running on" line, the
+ * collation line, the advertiser above "Sponsored", the body copy, the
+ * outbound link and the call to action. The old fixture had none of this,
+ * which is why a card saved with no dates, no copy and no link went unnoticed.
+ */
 const card = (id, name) => `
   <div class="card" style="width:330px;border:1px solid #ddd;padding:12px;display:flex;flex-direction:column">
-    <div style="display:flex;gap:8px"><div role="button" tabindex="0" style="flex:1">See ad details</div></div>
-    <div><strong>${name}</strong> Sponsored</div>
-    <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="290" height="180" />
+    <div>Active</div>
     <div>Library ID: ${id}</div>
-    <div>Started running on Jan 15, 2026</div>
+    <div>Started running on 15 Jan 2026</div>
+    <div>Platforms</div>
+    <img alt="Facebook" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="12" height="12" />
+    <img alt="Instagram" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="12" height="12" />
+    <div>2 ads use this creative and text</div>
+    <div style="display:flex;gap:8px"><div role="button" tabindex="0" style="flex:1">See ad details</div></div>
+    <div><strong>${name}</strong></div>
+    <div>Sponsored</div>
+    <div>Hydration that actually works. One stick a day, and you are done with
+      chalky tablets for good.</div>
+    <!-- An http URL, because the scrape deliberately keeps only http(s) media:
+         a data: URI is a spacer or an inlined icon, never a creative. -->
+    <img class="creative" src="https://scontent.fbcdn.net/v/creative-${id}.jpg" width="290" height="180" />
+    <a href="https://drinkhyro.com.au/offer">50% Off + Free Welcome Kit</a>
+    <div role="button" tabindex="0">Shop now</div>
   </div>`;
 const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   <div style="display:flex;gap:14px;padding:14px">${ids.map((id, i) => card(id, 'Hyro ' + i)).join('')}</div>
@@ -86,6 +106,23 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   });
   ok(report && report.ok === true && report.onLibrary === true, 'responds, and says it is on the Library');
   ok(report.ads.length === 2 && report.decorated === 2, `reports 2 ads, 2 decorated`);
+
+  console.log('--- a card with no captured record still yields its details ---');
+  // The DOM fallback used to carry only the advertiser, an active flag and the
+  // media, so a saved ad showed "Unknown page" with no dates and no copy.
+  const ad = report.ads.find((a) => a.id === '853222324181295');
+  ok(!!ad && ad.fromDom === true, 'this one came from the DOM, not from a capture');
+  ok(ad.pageName === 'Hyro 0', `advertiser (${ad.pageName})`);
+  ok(ad.isActive === true, `status (${ad.isActive})`);
+  ok(new Date(ad.startDate).getUTCFullYear() === 2026 && new Date(ad.startDate).getUTCMonth() === 0,
+     `start date parsed (${ad.startDate && new Date(ad.startDate).toISOString().slice(0, 10)})`);
+  ok(ad.collationCount === 2, `variation count (${ad.collationCount})`);
+  ok(/drinkhyro\.com\.au/.test(ad.linkUrl || ''), `destination (${ad.linkUrl})`);
+  ok(ad.ctaText === 'Shop now', `call to action (${ad.ctaText})`);
+  ok(/Hydration that actually works/.test(ad.body || ''), 'body copy');
+  ok((ad.platforms || []).includes('Facebook') && ad.platforms.includes('Instagram'),
+     `platforms (${(ad.platforms || []).join(', ')})`);
+  ok(ad.media.length === 1, `one creative, avatars and spacers skipped (${ad.media.length})`);
 
   console.log('--- side panel ---');
   const panel = await ctx.newPage();

@@ -389,8 +389,13 @@
 
   /**
    * An ad assembled from the card's own DOM, for when the printed id was not
-   * in the captured set. Less rich than the GraphQL record (no CTA type, no
-   * HD video URL) but enough to save the ad and download what is on screen.
+   * in the captured set.
+   *
+   * This used to carry only the advertiser, an active flag and the media, so
+   * an ad saved from this path showed "Unknown page" with no dates, no copy
+   * and no link. Everything Facebook prints on the card is read here instead.
+   * Still thinner than the GraphQL record (no CTA type, no HD video URL, no
+   * page id), and still flagged fromDom so a later capture upgrades it.
    */
   /**
    * Facebook's CDN URLs carry signed, short-lived query parameters that differ
@@ -477,9 +482,48 @@
 
   /**
    * An ad assembled from the card's own DOM, for when the printed id was not
-   * in the captured set. Less rich than the GraphQL record (no CTA type, no
-   * HD video URL) but enough to save the ad and download what is on screen.
+   * in the captured set.
+   *
+   * This used to carry only the advertiser, an active flag and the media, so
+   * an ad saved from this path showed "Unknown page" with no dates, no copy
+   * and no link. Everything Facebook prints on the card is read here instead.
+   * Still thinner than the GraphQL record (no CTA type, no HD video URL, no
+   * page id), and still flagged fromDom so a later capture upgrades it.
    */
+  /** The card's own text, line by line, for the field scrapes below. */
+  const cardLines = (card) => {
+    const out = [];
+    const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const v = (n.nodeValue || "").trim();
+      if (v) out.push(v);
+    }
+    return out;
+  };
+
+  /**
+   * Facebook prints "Started running on 15 Jan 2026" and locale variants of
+   * it, so match the digits and the month rather than the sentence and let
+   * Date do the parsing.
+   */
+  const parseCardDate = (text) => {
+    if (!text) return null;
+    const m = text.match(
+      /(\d{1,2}\s+[A-Za-z]{3,}\s+\d{4})|([A-Za-z]{3,}\s+\d{1,2},?\s+\d{4})/,
+    );
+    if (!m) return null;
+    const ms = Date.parse(m[0].replace(",", ""));
+    return Number.isFinite(ms) ? ms : null;
+  };
+
+  const PLATFORM_WORDS = [
+    "Facebook",
+    "Instagram",
+    "Audience Network",
+    "Messenger",
+    "Threads",
+  ];
+
   const adFromCard = (id, card) => {
     const media = [];
     for (const img of card.querySelectorAll("img")) {
@@ -509,11 +553,65 @@
         media.push({ type: "image", url: vid.poster, previewUrl: vid.poster });
       }
     }
-    const head = (card.textContent || "").slice(0, 300);
+
+    const lines = cardLines(card);
+    const text = lines.join("\n");
+
+    const startLine = lines.find((l) => /started running/i.test(l));
+    const endLine = lines.find((l) => /(ended|stopped running)/i.test(l));
+    const collation = text.match(/(\d+)\s+ads?\s+use\s+this\s+creative/i);
+
+    // The outbound link, not a Facebook one. Its text is usually the headline.
+    const link = [...card.querySelectorAll("a[href]")].find(
+      (a) => /^https?:/.test(a.href) && !/facebook\.com/.test(a.href),
+    );
+
+    // The call to action is a short role=button that is not one of Facebook's
+    // own card controls.
+    const cta = [...card.querySelectorAll('[role="button"]')]
+      .map((n) => (n.textContent || "").trim())
+      .find(
+        (v) =>
+          v &&
+          v.length <= 28 &&
+          !/see (ad|summary) details|open drop-?down|more options/i.test(v),
+      );
+
+    // The longest line that is not card chrome is the ad copy.
+    const body = lines
+      .filter(
+        (l) =>
+          l.length > 40 &&
+          !/library id|started running|ads? use this creative|sponsored/i.test(l),
+      )
+      .sort((a, b) => b.length - a.length)[0];
+
+    const platforms = PLATFORM_WORDS.filter((name) =>
+      [...card.querySelectorAll("[aria-label],[alt],[title]")].some((n) =>
+        new RegExp(name, "i").test(
+          `${n.getAttribute("aria-label") || ""} ${n.getAttribute("alt") || ""} ${n.getAttribute("title") || ""}`,
+        ),
+      ),
+    );
+
+    const active = /(^|\n)\s*active\s*(\n|$)/i.test(text)
+      ? true
+      : /(^|\n)\s*inactive\s*(\n|$)/i.test(text)
+        ? false
+        : null;
+
     return {
       id,
       pageName: guessAdvertiser(card),
-      isActive: /\bactive\b/i.test(head) ? true : null,
+      isActive: active,
+      startDate: parseCardDate(startLine),
+      endDate: parseCardDate(endLine),
+      collationCount: collation ? Number(collation[1]) : null,
+      body: body || null,
+      title: link ? (link.textContent || "").trim().slice(0, 120) || null : null,
+      ctaText: cta || null,
+      linkUrl: link ? link.href : null,
+      platforms,
       media,
       capturedAt: Date.now(),
       libraryUrl: `https://www.facebook.com/ads/library/?id=${id}`,
