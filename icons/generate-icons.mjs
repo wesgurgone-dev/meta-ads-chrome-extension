@@ -71,7 +71,10 @@ const png = (size, pixelFn) => {
 
 // --- The mark -------------------------------------------------------------
 
-const BLUE = [42, 120, 214]; // #2a78d6, the extension's accent
+// A diagonal blue-to-violet gradient across the whole stack, so the cards
+// read as one object lit from the top left rather than three flat shapes.
+const GRAD_FROM = [42, 120, 214]; // #2a78d6
+const GRAD_TO = [139, 92, 246]; // #8b5cf6
 
 // Back to front. Coordinates are fractions of the canvas.
 const CARDS = [
@@ -93,6 +96,16 @@ const roundedRectSDF = (px, py, card) => {
   return Math.hypot(ox, oy) + Math.min(Math.max(dx, dy), 0) - card.r;
 };
 
+/** Gradient colour at a point, sampled across the top-left/bottom-right axis. */
+const gradientAt = (u, v) => {
+  const t = Math.min(Math.max((u + v) / 2, 0), 1);
+  return [
+    GRAD_FROM[0] + (GRAD_TO[0] - GRAD_FROM[0]) * t,
+    GRAD_FROM[1] + (GRAD_TO[1] - GRAD_FROM[1]) * t,
+    GRAD_FROM[2] + (GRAD_TO[2] - GRAD_FROM[2]) * t,
+  ];
+};
+
 const draw = (x, y, size) => {
   const u = (x + 0.5) / size;
   const v = (y + 0.5) / size;
@@ -104,6 +117,10 @@ const draw = (x, y, size) => {
   let B = 0;
   let A = 0;
 
+  // The gradient spans the whole mark, not each card, so the stack reads as
+  // one object rather than three independently shaded ones.
+  const [gr, gg, gb] = gradientAt(u, v);
+
   for (const card of CARDS) {
     const d = roundedRectSDF(u, v, card);
     const coverage = Math.min(Math.max(0.5 - d / edge, 0), 1);
@@ -111,9 +128,9 @@ const draw = (x, y, size) => {
     const sa = coverage * card.alpha;
     const outA = sa + A * (1 - sa);
     if (outA <= 0) continue;
-    R = (BLUE[0] * sa + R * A * (1 - sa)) / outA;
-    G = (BLUE[1] * sa + G * A * (1 - sa)) / outA;
-    B = (BLUE[2] * sa + B * A * (1 - sa)) / outA;
+    R = (gr * sa + R * A * (1 - sa)) / outA;
+    G = (gg * sa + G * A * (1 - sa)) / outA;
+    B = (gb * sa + B * A * (1 - sa)) / outA;
     A = outA;
   }
 

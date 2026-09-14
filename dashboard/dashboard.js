@@ -58,6 +58,17 @@
   const daysRunning = (ad) => M.daysRunning(ad);
   const adFormat = (ad) => M.adFormat(ad);
 
+  /**
+   * Reflect the theme choice on the root element. "system" stamps nothing, so
+   * the prefers-color-scheme media query decides; an explicit choice stamps
+   * data-theme and wins in both directions.
+   */
+  const applyTheme = () => {
+    const theme = (state.settings || {}).theme || "system";
+    if (theme === "system") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+  };
+
   const activeSpaceId = () => state.settings.activeSpaceId;
   const activeSpace = () => state.spaces[activeSpaceId()] || null;
   const spaceLists = () =>
@@ -144,6 +155,7 @@
   // -------------------------------------------------------------------
 
   const render = () => {
+    applyTheme();
     renderSpaces();
     renderSidebar();
     const ads = visibleAds();
@@ -789,6 +801,19 @@
        }
        <div class="toggle-row">
          <div class="toggle-text">
+           <div><strong>Appearance</strong></div>
+           <div class="toggle-sub">Applies to the dashboard and the side panel.</div>
+         </div>
+       </div>
+       <div class="form-row">
+         <select id="theme-select">
+           <option value="system">Match system</option>
+           <option value="light">Light</option>
+           <option value="dark">Dark</option>
+         </select>
+       </div>
+       <div class="toggle-row">
+         <div class="toggle-text">
            <div><strong>Download folders</strong></div>
            <div class="toggle-sub">Where creatives land under Downloads/MetaAdsLibrary.</div>
          </div>
@@ -842,6 +867,13 @@
             alert(res.ok ? `Pulled ${res.pulled} new ads.` : "Pull failed");
             refresh();
           });
+        const themeSel = root.querySelector("#theme-select");
+        themeSel.value = (state.settings || {}).theme || "system";
+        themeSel.addEventListener("change", async () => {
+          await send({ type: "SET_THEME", theme: themeSel.value });
+          await refresh();
+        });
+
         const dlSel = root.querySelector("#dl-folder");
         dlSel.value = (state.settings || {}).downloadFolder || "list";
         dlSel.addEventListener("change", async () => {

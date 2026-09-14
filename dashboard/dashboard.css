@@ -21,7 +21,98 @@
   --radius: 12px;
   --font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
   --shadow: 0 1px 2px rgba(16, 18, 22, 0.06);
+  --nav-active-ink: #17508f;
+  --chip-hot-bg: #fdf4e3;
+  --chip-hot-border: #f0dcae;
+  --chip-hot-ink: #8a6100;
   color-scheme: light;
+}
+
+/* Dark theme. Tokens only: every rule above is written against them, so the
+   whole dashboard swaps in one place. Declared under both scopes so the
+   explicit choice wins in either direction and "system" still follows the OS.
+   Chart hues are the dark-validated categorical steps, not the light ones
+   dimmed, which would fail the contrast and CVD gates. */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane: #0e0f13;
+    --dot: rgba(255, 255, 255, 0.07);
+    --panel: #16181d;
+    --panel-2: #1d2027;
+    --border: #272b34;
+    --border-strong: #343946;
+    --text: #eef0f4;
+    --text-2: #a9aeba;
+    --muted: #7f8693;
+    --blue: #5b9df5;
+    --blue-soft: rgba(91, 157, 245, 0.16);
+    --green: #2fc08c;
+    --red: #f2646f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --nav-active-ink: #a9cdff;
+    --chip-hot-bg: rgba(201, 133, 0, 0.18);
+    --chip-hot-border: rgba(201, 133, 0, 0.4);
+    --chip-hot-ink: #e8b45c;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane: #0e0f13;
+  --dot: rgba(255, 255, 255, 0.07);
+  --panel: #16181d;
+  --panel-2: #1d2027;
+  --border: #272b34;
+  --border-strong: #343946;
+  --text: #eef0f4;
+  --text-2: #a9aeba;
+  --muted: #7f8693;
+  --blue: #5b9df5;
+  --blue-soft: rgba(91, 157, 245, 0.16);
+  --green: #2fc08c;
+  --red: #f2646f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --nav-active-ink: #a9cdff;
+  --chip-hot-bg: rgba(201, 133, 0, 0.18);
+  --chip-hot-border: rgba(201, 133, 0, 0.4);
+  --chip-hot-ink: #e8b45c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .metrics {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --viz-track: #262a33;
+  }
+}
+
+:root[data-theme="dark"] .metrics {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --viz-track: #262a33;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .badge {
+    background: rgba(0, 0, 0, 0.66);
+  }
+  :root:not([data-theme="light"]) #viz-tip {
+    background: #2a2f3a;
+  }
+}
+
+:root[data-theme="dark"] .badge {
+  background: rgba(0, 0, 0, 0.66);
+}
+
+:root[data-theme="dark"] #viz-tip {
+  background: #2a2f3a;
 }
 
 * {
@@ -33,7 +124,9 @@ body {
   display: flex;
   min-height: 100vh;
   color: var(--text);
-  font: 14px/1.5 var(--font);
+  font: 400 14px/1.5 var(--font);
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
   /* The micro dot texture: a 1px dot on a 14px grid over the page plane. */
   background-color: var(--plane);
   background-image: radial-gradient(var(--dot) 1px, transparent 1px);
@@ -184,7 +277,7 @@ h2 {
 
 .nav-item.active {
   background: var(--blue-soft);
-  color: #17508f;
+  color: var(--nav-active-ink);
 }
 
 .nav-dot {
@@ -212,7 +305,7 @@ h2 {
 }
 
 .nav-item.active .nav-count {
-  color: #17508f;
+  color: var(--nav-active-ink);
 }
 
 .nav-menu {
@@ -240,6 +333,7 @@ h2 {
 
 .btn {
   font: 500 13px/1 inherit;
+  letter-spacing: -0.012em;
   border: none;
   border-radius: 8px;
   padding: 9px 12px;
@@ -288,6 +382,7 @@ h2 {
 
 input,
 select {
+  letter-spacing: -0.011em;
   background: var(--panel);
   border: 1px solid var(--border-strong);
   color: var(--text);
@@ -713,9 +808,9 @@ select:focus {
 }
 
 .chip.hot {
-  background: #fdf4e3;
-  border-color: #f0dcae;
-  color: #8a6100;
+  background: var(--chip-hot-bg);
+  border-color: var(--chip-hot-border);
+  color: var(--chip-hot-ink);
 }
 
 .chip.list-chip {

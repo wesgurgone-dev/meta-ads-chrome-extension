@@ -22,6 +22,7 @@
     lists: [],
     activeSpaceId: null,
     defaultListId: null,
+    theme: "system",
   };
   let store = { ads: {}, lists: {}, spaces: {}, settings: {}, identity: {} };
   let openMenu = null;
@@ -53,9 +54,11 @@
       lists: res.lists || [],
       activeSpaceId: res.activeSpaceId,
       defaultListId: res.defaultListId,
+      theme: res.theme || "system",
     };
     for (const id of res.savedIds || []) savedIds.add(id);
     refreshSavedButtons();
+    applyTheme();
   };
 
   const refreshStore = async () => {
@@ -93,6 +96,29 @@
     const end = ad.isActive === false && ad.endDate ? ad.endDate : Date.now();
     return Math.max(1, Math.round((end - ad.startDate) / 86400000));
   };
+
+  const prefersDark =
+    typeof matchMedia === "function"
+      ? matchMedia("(prefers-color-scheme: dark)")
+      : null;
+
+  /**
+   * The panel follows the extension's own theme setting, which can differ
+   * from the OS, so this is a class rather than a media query. The per-card
+   * action row is deliberately left alone: it sits inside Facebook's card and
+   * has to match Facebook, not us.
+   */
+  const applyTheme = () => {
+    if (!panelEl) return;
+    const choice = targets.theme || "system";
+    const dark =
+      choice === "dark" ||
+      (choice === "system" && !!(prefersDark && prefersDark.matches));
+    panelEl.classList.toggle("mal-dark", dark);
+  };
+
+  if (prefersDark && prefersDark.addEventListener)
+    prefersDark.addEventListener("change", () => applyTheme());
 
   const activeLists = () =>
     targets.lists.filter((l) => l.spaceId === targets.activeSpaceId);
@@ -655,13 +681,7 @@
       </nav>
       <div class="mal-main">
         <header class="mal-head">
-          <span class="mal-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <rect x="1" y="7" width="8.5" height="10" rx="2" fill="currentColor" opacity=".26"/>
-              <rect x="6" y="5" width="9.5" height="14" rx="2.2" fill="currentColor" opacity=".5"/>
-              <rect x="12" y="3" width="11" height="18" rx="2.6" fill="currentColor"/>
-            </svg>
-          </span>
+          <span class="mal-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><defs><linearGradient id="malMarkPanel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a78d6"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect x="1" y="7" width="8.5" height="10" rx="2" fill="url(#malMarkPanel)" opacity=".26"/><rect x="6" y="5" width="9.5" height="14" rx="2.2" fill="url(#malMarkPanel)" opacity=".5"/><rect x="12" y="3" width="11" height="18" rx="2.6" fill="url(#malMarkPanel)"/></svg></span>
           <div>
             <div class="mal-head-title">Ads Saver</div>
             <div class="mal-head-sub" id="mal-head-sub"></div>
@@ -684,6 +704,7 @@
     panelEl.querySelectorAll(".mal-rail-btn").forEach((btn) => {
       btn.addEventListener("click", () => setView(btn.dataset.view));
     });
+    applyTheme();
   };
 
   const openPanel = () => {
@@ -839,7 +860,11 @@
 
     const capture = el("div", "mal-card");
     capture.append(
-      el("div", "mal-card-title", `${pageAds.length} ads on this page`),
+      el(
+        "div",
+        "mal-card-title",
+        `${pageAds.length} ad${pageAds.length === 1 ? "" : "s"} on this page`,
+      ),
       el(
         "div",
         "mal-card-sub",
@@ -1023,7 +1048,11 @@
     const matched = [...onPage.keys()].filter((id) => captured.has(id)).length;
     const diag = el("div", "mal-card");
     diag.append(
-      el("div", "mal-card-sub", `${onPage.size} ad cards found on the page`),
+      el(
+        "div",
+        "mal-card-sub",
+        `${onPage.size} ad card${onPage.size === 1 ? "" : "s"} found on the page`,
+      ),
       el(
         "div",
         "mal-card-sub",

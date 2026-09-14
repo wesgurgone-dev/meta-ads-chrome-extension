@@ -14,6 +14,7 @@
    width, separated by a hairline so it reads as its own area rather than
    floating between Facebook's own blocks. */
 .mal-bar {
+  letter-spacing: -0.011em;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -32,6 +33,7 @@
 }
 
 .mal-btn {
+  letter-spacing: -0.012em;
   font:
     500 14px/1 "Helvetica Neue",
     Helvetica,
@@ -167,6 +169,7 @@
 }
 
 .mal-menu-item {
+  letter-spacing: -0.011em;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -224,17 +227,10 @@
   max-width: calc(100vw - 28px);
   z-index: 2147483646;
   display: flex;
-  /* Liquid glass: the page behind is blurred and saturated through a
-     translucent pane, with the dot grid riding on the glass itself. Every
-     surface above stays translucent so the texture and the blur read as one
-     continuous material rather than stacked panels. */
-  background-color: rgba(255, 255, 255, 0.6);
-  background-image: radial-gradient(
-    rgba(17, 17, 17, 0.09) 1px,
-    transparent 1px
-  );
-  background-size: 14px 14px;
-  background-position: -1px -1px;
+  /* Liquid glass only: no dot texture here. The grid is the full dashboard's
+     signature; over Facebook's own page the panel reads better as plain
+     glass, and the texture fought with the blurred content behind it. */
+  background-color: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(30px) saturate(180%);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.55);
@@ -247,11 +243,13 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.85),
     inset 0 0 0 1px rgba(255, 255, 255, 0.28);
   font:
-    13px/1.5 "Helvetica Neue",
+    400 13px/1.5 "Helvetica Neue",
     Helvetica,
     Arial,
     "Liberation Sans",
     sans-serif;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
   color: #16181d;
   transition:
     transform 0.22s ease,
@@ -290,8 +288,10 @@
 
 .mal-rail {
   flex: 0 0 68px;
-  background: rgba(255, 255, 255, 0.22);
-  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  /* No fill: the panel is one sheet of glass, so interior areas are defined
+     by hairlines and spacing rather than stacked translucent rectangles. */
+  background: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.4);
   padding: 12px 6px;
   display: flex;
   flex-direction: column;
@@ -303,12 +303,8 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  /* Slight frost so each tab lifts off the dot grid without hiding it. */
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: none;
+  border: 1px solid transparent;
   border-radius: 10px;
   padding: 9px 2px;
   cursor: pointer;
@@ -324,7 +320,7 @@
 }
 
 .mal-rail-btn:hover {
-  background: rgba(236, 236, 234, 0.8);
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .mal-rail-btn.mal-active {
@@ -347,10 +343,8 @@
   align-items: center;
   gap: 10px;
   padding: 14px 14px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.34);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  background: none;
 }
 
 .mal-mark {
@@ -402,10 +396,8 @@
 
 .mal-foot {
   padding: 10px 14px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.34);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+  background: none;
 }
 
 .mal-full {
@@ -415,9 +407,8 @@
 /* Panel content pieces */
 
 .mal-card {
-  background: rgba(255, 255, 255, 0.46);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 12px;
@@ -442,9 +433,8 @@
 }
 
 .mal-stat {
-  background: rgba(255, 255, 255, 0.46);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 10px;
   padding: 9px 10px;
 }
@@ -488,9 +478,8 @@
 }
 
 .mal-mini {
-  background: rgba(255, 255, 255, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 12px;
   overflow: hidden;
   display: flex;
@@ -696,6 +685,7 @@
    --------------------------------------------------------------------- */
 
 #mal-toast {
+  letter-spacing: -0.012em;
   position: fixed;
   left: 50%;
   bottom: 74px;
@@ -721,4 +711,142 @@
 #mal-toast.mal-toast-visible {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* ---------------------------------------------------------------------
+   Dark panel
+   ---------------------------------------------------------------------
+   Applied by class rather than a media query, because the panel follows the
+   extension's own theme setting, which may differ from the OS. The per-card
+   action row deliberately does NOT follow it: that row lives inside
+   Facebook's card and has to match Facebook, not us. */
+
+.mal-panel.mal-dark {
+  background-color: rgba(20, 22, 28, 0.84);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #eef0f4;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.mal-panel.mal-dark::before {
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.04) 26%,
+    rgba(255, 255, 255, 0) 52%
+  );
+}
+
+.mal-dark .mal-rail {
+  background: none;
+  border-right-color: rgba(255, 255, 255, 0.1);
+}
+
+.mal-dark .mal-rail-btn {
+  background: none;
+  border-color: transparent;
+  color: #c4ccd8;
+}
+
+.mal-dark .mal-rail-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.mal-dark .mal-rail-btn.mal-active {
+  background: rgba(91, 157, 245, 0.22);
+  border-color: rgba(91, 157, 245, 0.35);
+  color: #8ebbff;
+}
+
+.mal-dark .mal-head,
+.mal-dark .mal-foot {
+  background: none;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.mal-dark .mal-card,
+.mal-dark .mal-stat,
+.mal-dark .mal-mini {
+  background: none;
+  border-color: rgba(255, 255, 255, 0.13);
+  box-shadow: none;
+}
+
+.mal-dark .mal-head-sub,
+.mal-dark .mal-card-sub,
+.mal-dark .mal-section,
+.mal-dark .mal-empty,
+.mal-dark .mal-stat-label,
+.mal-dark .mal-mini-sub,
+.mal-dark .mal-list-count,
+.mal-dark .mal-menu-count {
+  color: #aab3c1;
+}
+
+.mal-dark .mal-btn-secondary {
+  background: rgba(255, 255, 255, 0.13);
+  color: #eef0f4;
+}
+
+.mal-dark .mal-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.19);
+}
+
+.mal-dark .mal-x {
+  color: #aab3c1;
+}
+
+.mal-dark .mal-x:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.mal-dark .mal-list-row {
+  color: #eef0f4;
+}
+
+.mal-dark .mal-list-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.mal-dark .mal-list-row.mal-is-default {
+  background: rgba(91, 157, 245, 0.2);
+  border-color: rgba(91, 157, 245, 0.32);
+}
+
+.mal-dark .mal-select {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #eef0f4;
+}
+
+.mal-dark .mal-mini-chip {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #b6bdc9;
+}
+
+.mal-dark .mal-mini-media {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mal-dark .mal-mini-name:hover {
+  color: #8ebbff;
+}
+
+.mal-dark .mal-code {
+  background: rgba(91, 157, 245, 0.2);
+  color: #8ebbff;
+}
+
+.mal-dark .mal-mark {
+  color: #5b9df5;
+}
+
+.mal-dark .mal-ad-open {
+  color: #8ebbff;
 }
