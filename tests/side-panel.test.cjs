@@ -219,6 +219,45 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   await panel.waitForTimeout(400);
   await panel.screenshot({ path: (process.env.SHOT_DIR || require('os').tmpdir()) + '/side-panel.png' });
 
+  console.log('--- dashboard detail view keeps tall creatives on screen ---');
+  const dash = await ctx.newPage();
+  watch(dash);
+  await dash.setViewportSize({ width: 1280, height: 900 });
+  await dash.goto(`chrome-extension://${extId}/dashboard/dashboard.html`);
+  await dash.waitForTimeout(1200);
+  const fit = await dash.evaluate(async () => {
+    // A real 9:16 creative, the common shape, at the size the modal gives it.
+    const svg =
+      "<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1920'>" +
+      "<rect width='1080' height='1920' fill='%23888'/></svg>";
+    const modal = document.getElementById('modal');
+    modal.classList.remove('hidden');
+    document.getElementById('modal-card').innerHTML =
+      '<h2>x</h2><div class="modal-media"><img id="probe"></div>' +
+      '<table class="detail-table"><tr><td>after</td></tr></table>';
+    const img = document.getElementById('probe');
+    await new Promise((res) => {
+      img.onload = res;
+      img.onerror = res;
+      img.src = 'data:image/svg+xml;utf8,' + svg;
+    });
+    const card = document.getElementById('modal-card');
+    return {
+      natural: img.naturalWidth + 'x' + img.naturalHeight,
+      mediaH: Math.round(img.getBoundingClientRect().height),
+      cardH: Math.round(card.getBoundingClientRect().height),
+      viewportH: window.innerHeight,
+      objectFit: getComputedStyle(img).objectFit,
+    };
+  });
+  ok(fit.natural === '1080x1920', `probe really is 9:16 (${fit.natural})`);
+  ok(fit.mediaH > 0, `and it really rendered (${fit.mediaH}px)`);
+  ok(fit.objectFit === 'contain', 'creatives letterbox rather than stretch');
+  ok(fit.mediaH <= fit.viewportH * 0.6,
+     `a 9:16 creative fits the viewport (${fit.mediaH}px of ${fit.viewportH}px)`);
+  ok(fit.cardH <= fit.viewportH,
+     `and the detail card does not exceed it (${fit.cardH}px)`);
+
   console.log('--- console clean ---');
   ok(errors.length === 0, errors.length ? errors.join(' | ') : 'no page errors');
 

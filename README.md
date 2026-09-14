@@ -16,6 +16,7 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 - **Capture from the source, not the DOM.** A page-world interceptor reads the Ad Library's own GraphQL responses, so you get fields the UI hides: HD video URLs, CTA type, destination link, and variation counts.
 - **Metrics**, collapsed by default so the grid leads, for the current space and filters: saves per day, top advertisers, format mix, placements, and (in a team space) who contributed what.
 - **Downloads at full resolution**, filed by list: `Downloads/MetaAdsLibrary/<list>/<advertiser>-<adId>.<ext>`. Switch to a folder per advertiser, or no subfolders, in Settings.
+- **Detail view that stays on screen.** Ad creatives are mostly 9:16; at the modal's full width that is around 1450px tall, so the creative is capped and letterboxed and the record below it stays reachable.
 - **Export** the current view as JSON or CSV.
 
 ## Install (unpacked)

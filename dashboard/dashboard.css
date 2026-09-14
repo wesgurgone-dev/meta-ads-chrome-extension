@@ -971,6 +971,7 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 20px;
 }
 
 .modal.hidden {
@@ -1017,11 +1018,29 @@ select:focus {
   margin: 14px 0;
 }
 
+/**
+ * Ad creatives are mostly 9:16. At the modal's full width that is around
+ * 1450px tall, which pushed the whole detail view off screen and made you
+ * scroll a video to reach the fields under it. Cap the height and letterbox
+ * instead: the creative stays whole and the rest of the record stays reachable.
+ */
 .modal-media img,
 .modal-media video {
   width: 100%;
+  max-height: 58vh;
+  object-fit: contain;
   border-radius: 10px;
-  background: var(--panel-2);
+  background: rgba(7, 7, 7, 0.35);
+}
+
+/* A single portrait creative does not need the full 860px column; centring it
+   keeps the letterboxing from dominating the view. */
+.modal-media:has(> :only-child) {
+  justify-items: center;
+}
+
+.modal-media > :only-child {
+  max-width: min(100%, 42vh);
 }
 
 .detail-table {
