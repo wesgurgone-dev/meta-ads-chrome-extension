@@ -292,6 +292,27 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   await dash.locator('.modal-close').click();
   await dash.waitForTimeout(300);
 
+  console.log('--- discovery derives search terms from a list ---');
+  // Only the first two steps are exercised here. The sweep itself opens tabs on
+  // facebook.com, and this container has no outbound network, so the tab never
+  // commits a navigation and Playwright never attaches to it - a routed fixture
+  // cannot reach it. The orchestration (polling, stall detection, the term cap,
+  // tab cleanup) is covered against a stubbed chrome.tabs in
+  // tests/discover.test.mjs instead, which is where it can actually be asserted.
+  await dash.locator('.pagetabs .ogui-segments__item:has-text("Discover")').click();
+  await dash.waitForTimeout(500);
+  ok(await dash.locator('.discover').count() === 1, 'the Discover section renders');
+  await dash.locator('.discover-step button:has-text("Suggest terms")').click();
+  await dash.waitForTimeout(400);
+  const suggested = await dash.locator('.discover-terms').inputValue();
+  ok(suggested.split('\n').filter(Boolean).length > 0,
+     `terms are derived from the seed list: ${suggested.split('\n').join(', ')}`);
+  ok(!/hyro/i.test(suggested), 'and never the seed advertiser\'s own name');
+  ok(await dash.locator('.discover-step button:has-text("Search the Ad Library")').count() === 1,
+     'the search is a deliberate second click, never automatic');
+  await dash.locator('.pagetabs .ogui-segments__item:has-text("Library")').click();
+  await dash.waitForTimeout(400);
+
   console.log('--- team sync status reports each fact separately ---');
   // The browser in CI has no outbound network, so the project is routed here.
   // The three facts fail independently and each has a different fix, which is

@@ -22,10 +22,15 @@
   let libraryMode = false;
 
   const MSG_TYPE = "MAL_ADS_CAPTURED";
+  const READY_TYPE = "MAL_READY";
   const captured = new Map(); // adId -> ad from the GraphQL interceptor
   const mediaIndex = new Map(); // normalised creative URL -> captured ad
   const onPage = new Map(); // adId -> ad actually decorated on screen
   const savedIds = new Set();
+  // Whether the interceptor has posted anything at all. A discovery sweep needs
+  // to tell "this search returned no ads" from "the parser saw nothing", and a
+  // count of zero says neither.
+  let sawPayload = false;
 
   let targets = {
     spaces: [],
@@ -82,6 +87,7 @@
     if (event.source !== window) return;
     const data = event.data;
     if (!data || data.type !== MSG_TYPE || !Array.isArray(data.ads)) return;
+    sawPayload = true;
     for (const ad of data.ads) {
       if (!ad || !ad.id) continue;
       captured.set(ad.id, ad);
@@ -90,6 +96,16 @@
     decorateCards();
     notifyPanel();
   });
+
+  // This script is injected at document_idle, after the interceptor has already
+  // scanned the server-rendered first page, so ask it to repeat itself rather
+  // than waiting for a GraphQL response that a single-search background tab
+  // will never make.
+  try {
+    window.postMessage({ type: READY_TYPE }, location.origin);
+  } catch (err) {
+    /* a page that refuses postMessage still works through later captures */
+  }
 
   // ---------------------------------------------------------------------
   // Small helpers
@@ -760,15 +776,41 @@
    * script simply never answers, which the panel reads as "nothing here".
    */
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (!msg || msg.type !== "GET_PAGE_ADS") return false;
-    sendResponse({
-      ok: true,
-      onLibrary: onLibrary(),
-      ads: [...onPage.values()],
-      found: onPage.size,
-      decorated: decoratedCount,
-      matched: [...onPage.keys()].filter((id) => captured.has(id)).length,
-    });
+    if (!msg) return false;
+
+    if (msg.type === "GET_PAGE_ADS") {
+      sendResponse({
+        ok: true,
+        onLibrary: onLibrary(),
+        ads: [...onPage.values()],
+        found: onPage.size,
+        decorated: decoratedCount,
+        matched: [...onPage.keys()].filter((id) => captured.has(id)).length,
+      });
+      return false;
+    }
+
+    // Everything the interceptor parsed, whether or not a card for it was ever
+    // rendered and decorated. The two numbers come apart in exactly one place
+    // that matters: a background tab, which captures normally and renders
+    // almost nothing. Discovery reads this; the panel reads GET_PAGE_ADS.
+    //
+    // `scanned` is what separates "this search matched no advertisers" from
+    // "the interceptor saw nothing", which look identical from a count of zero
+    // and need completely different responses.
+    if (msg.type === "GET_CAPTURED_ADS") {
+      sendResponse({
+        ok: true,
+        onLibrary: onLibrary(),
+        ads: [...captured.values()],
+        captured: captured.size,
+        decorated: decoratedCount,
+        scanned: sawPayload,
+        url: location.href,
+      });
+      return false;
+    }
+
     return false;
   });
 

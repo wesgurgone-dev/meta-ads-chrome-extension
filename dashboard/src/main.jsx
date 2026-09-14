@@ -21,6 +21,9 @@ import {
 import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../../src/supabase/config.js";
 import { createTeam, joinTeam, pull, push, watch } from "../../src/supabase/sync.js";
 import { scoreAd } from "../../src/rank/index.js";
+import { deriveTerms, seedProfile } from "../../src/discover/terms.js";
+import { rankCompetitors } from "../../src/discover/score.js";
+import { MAX_TERMS, sweep, sweepFailed } from "../../src/discover/sweep.js";
 import { AXES, AXIS_LABELS } from "../../src/rank/schema.js";
 import {
   LIST_COLORS,
@@ -1011,6 +1014,176 @@ const SettingsModal = ({ state, onClose, onDone }) => {
 
 /* ---------- app ---------- */
 
+/**
+ * Finding advertisers in the same niche.
+ *
+ * There is no similarity endpoint to call - not at Apify, not in Meta's own
+ * ads_archive API. Every Ad Library source takes a keyword or a page URL, so
+ * similarity has to be manufactured in three steps, and this view shows all
+ * three rather than hiding them behind one button: derive terms from a list you
+ * already like, search those terms, then rank who came back by how much they
+ * look like the seed.
+ *
+ * The searches run in background tabs on the user's own Facebook session. That
+ * is what makes this free and it is also the risk, so the term count is capped,
+ * the user edits the terms before anything opens, and nothing runs on its own.
+ */
+const Discover = ({ state, lists, activeList }) => {
+  const [listId, setListId] = useState(activeList !== "__all__" ? activeList : (lists[0] || {}).id);
+  const [terms, setTerms] = useState([]);
+  const [edited, setEdited] = useState("");
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const [results, setResults] = useState(null);
+  const [warning, setWarning] = useState(null);
+
+  const seedAds = useMemo(() => {
+    const list = state.lists[listId];
+    if (!list) return [];
+    return (list.adIds || []).map((id) => state.ads[id]).filter(Boolean);
+  }, [state, listId]);
+
+  const suggest = () => {
+    const derived = deriveTerms(seedAds, { limit: MAX_TERMS });
+    setTerms(derived);
+    setEdited(derived.map((t) => t.term).join("\n"));
+    setResults(null);
+    setWarning(null);
+  };
+
+  const run = async () => {
+    const chosen = edited
+      .split("\n")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, MAX_TERMS);
+    if (!chosen.length) return;
+    setRunning(true);
+    setResults(null);
+    setWarning(null);
+    const hits = await sweep(chosen, { onProgress: setProgress });
+    setRunning(false);
+    setProgress(null);
+    // A sweep where the interceptor never posted anywhere is a failed read, not
+    // an empty market, and saying "no competitors found" would be a lie.
+    if (sweepFailed(hits)) {
+      setWarning(
+        "Nothing could be read from the Ad Library. Open it once in a normal tab and check you are signed in, then try again.",
+      );
+      return;
+    }
+    const seed = seedProfile(seedAds);
+    setResults({ rows: rankCompetitors(hits, seed), hits });
+  };
+
+  return (
+    <div className="discover">
+      <Surface className="discover-step" material="clear">
+        <h2>1. Pick a list to match</h2>
+        <p className="note">
+          The ads in this list are the example. Their landing-page domains, their
+          advertisers and the words their copy shares become the search terms.
+        </p>
+        <div className="discover-row">
+          <select value={listId || ""} onChange={(e) => setListId(e.target.value)} aria-label="Seed list">
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name} ({l.adIds.length})
+              </option>
+            ))}
+          </select>
+          <Button onClick={suggest} disabled={!seedAds.length}>
+            Suggest terms
+          </Button>
+          <span className="note">{seedAds.length} ads in this list</span>
+        </div>
+      </Surface>
+
+      {terms.length > 0 && (
+        <Surface className="discover-step" material="clear">
+          <h2>2. Edit the terms</h2>
+          <p className="note">
+            One per line, at most {MAX_TERMS}. Each one opens a background Ad
+            Library search on your own Facebook session, with a pause between
+            them, and reads the first page of results.
+          </p>
+          <textarea
+            className="discover-terms"
+            rows={Math.min(MAX_TERMS, Math.max(3, terms.length))}
+            value={edited}
+            onChange={(e) => setEdited(e.target.value)}
+            aria-label="Search terms"
+          />
+          <div className="discover-row">
+            <Button variant="primary" onClick={run} disabled={running}>
+              {running ? "Searching..." : "Search the Ad Library"}
+            </Button>
+            {progress ? (
+              <span className="note">
+                {progress.phase === "opening"
+                  ? `Opening "${progress.term}"`
+                  : progress.phase === "capturing"
+                    ? `"${progress.term}": ${progress.found} ads`
+                    : `"${progress.term}" done`}
+              </span>
+            ) : null}
+          </div>
+        </Surface>
+      )}
+
+      {warning ? <Surface className="discover-step" material="clear"><p className="note score-error">{warning}</p></Surface> : null}
+
+      {results && (
+        <Surface className="discover-step" material="clear">
+          <h2>3. Who came back</h2>
+          <p className="note">
+            Ranked by how many of your terms they matched, how close their domain
+            is to yours, how many ads they run and how long those ads have been
+            running. Marketplaces and deals sites are demoted, not hidden.
+          </p>
+          {results.rows.length === 0 ? (
+            <p className="note">
+              Nothing matched that was not already in your list. Try broader terms.
+            </p>
+          ) : (
+            <table className="discover-table">
+              <thead>
+                <tr>
+                  <th>Advertiser</th>
+                  <th>Domain</th>
+                  <th>Terms</th>
+                  <th>Ads</th>
+                  <th>Median days</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.rows.slice(0, 40).map((row) => (
+                  <tr key={row.key}>
+                    <td>
+                      <a href={row.libraryUrl} target="_blank" rel="noreferrer">
+                        {row.pageName}
+                      </a>
+                    </td>
+                    <td>{row.domain || "-"}</td>
+                    <td>{row.terms.length}</td>
+                    <td>{row.adCount}</td>
+                    <td>{row.medianDays}</td>
+                    <td className="discover-why">{row.reasons.join("; ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="note">
+            {results.hits.map((h) => `"${h.term}": ${h.captured}`).join(" · ")}
+          </p>
+        </Surface>
+      )}
+    </div>
+  );
+};
+
 const App = () => {
   const [state, setState] = useState({
     spaces: {},
@@ -1020,6 +1193,7 @@ const App = () => {
     identity: {},
   });
   const [ui, setUi] = useState({
+    page: "library",
     activeList: "__all__",
     search: "",
     format: "",
@@ -1310,6 +1484,24 @@ const App = () => {
       </Surface>
 
       <main id="main">
+        <Surface id="pagetabs" className="pagetabs" material="clear">
+          <SegmentedControl
+            aria-label="Section"
+            value={ui.page}
+            onValueChange={(v) => setUi((u) => ({ ...u, page: v }))}
+            items={[
+              { value: "library", label: "Library" },
+              { value: "discover", label: "Discover" },
+            ]}
+          />
+        </Surface>
+
+        {ui.page === "discover" && (
+          <Discover state={state} lists={lists} activeList={ui.activeList} />
+        )}
+
+        {ui.page === "library" && (
+        <>
         <Surface id="topbar" className="topbar" material="clear">
           <input
             id="search"
@@ -1517,6 +1709,8 @@ const App = () => {
               caret beside Save to drop it straight into a list.
             </p>
           </div>
+        )}
+        </>
         )}
       </main>
 

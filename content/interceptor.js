@@ -15,6 +15,16 @@
   window.__malInterceptorInstalled = true;
 
   const MSG_TYPE = "MAL_ADS_CAPTURED";
+  const READY_TYPE = "MAL_READY";
+
+  // Everything published so far, kept so a listener that arrives late can be
+  // caught up. This matters most for the very first batch: the inline scan runs
+  // at DOMContentLoaded and the content script that listens for it is injected
+  // at document_idle, which is after. On a page the user is scrolling the next
+  // GraphQL response covers the gap; in a background tab opened for one search
+  // there is no next response, and the server-rendered first page is the whole
+  // result.
+  const published = new Map();
 
   // ---------------------------------------------------------------------
   // Normalization
@@ -213,8 +223,15 @@
     return ads;
   };
 
-  const publish = (ads) => {
-    if (!ads.length) return;
+  /**
+   * `always` posts even an empty batch. Only the initial inline scan uses it,
+   * so a listener can tell "this page was read and had no ads" from "nothing
+   * ever read this page" - two states that look identical from a count of zero
+   * and need opposite responses.
+   */
+  const publish = (ads, { always = false } = {}) => {
+    for (const ad of ads) if (ad && ad.id) published.set(ad.id, ad);
+    if (!ads.length && !always) return;
     try {
       window.postMessage({ type: MSG_TYPE, ads }, window.location.origin);
     } catch (err) {
@@ -299,8 +316,17 @@
         /* ignore */
       }
     }
-    publish(ads);
+    publish(ads, { always: true });
   };
+
+  // The content script announces itself once it is listening; answer with
+  // everything captured before it existed.
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    const data = event.data;
+    if (!data || data.type !== READY_TYPE) return;
+    publish([...published.values()], { always: true });
+  });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", scanInlineScripts, {

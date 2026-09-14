@@ -1499,3 +1499,79 @@ h2,
   margin-top: 8px;
   color: #e34948;
 }
+
+/* -------------------------------------------------------------- discover */
+
+.pagetabs {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.discover {
+  display: grid;
+  gap: 16px;
+}
+
+.discover-step {
+  padding: 20px 22px;
+}
+
+.discover-step h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.discover-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.discover-terms {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  background: rgba(127, 127, 127, 0.06);
+  color: inherit;
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.discover-table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.discover-table th,
+.discover-table td {
+  text-align: left;
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.15);
+  vertical-align: top;
+}
+
+.discover-table th {
+  font-weight: 550;
+  opacity: 0.6;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The reason a row is here matters more than its score, which is why the score
+   itself is not a column: a number with no explanation invites trust it has
+   not earned. */
+.discover-why {
+  opacity: 0.65;
+  max-width: 280px;
+}
