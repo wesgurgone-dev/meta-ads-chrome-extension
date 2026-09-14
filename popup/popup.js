@@ -3,62 +3,59 @@
 
   const M = globalThis.MalMetrics;
 
+  const esc = (s) =>
+    String(s ?? "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
+
   chrome.runtime.sendMessage({ type: "GET_STATE" }, (res) => {
     if (chrome.runtime.lastError || !res || !res.ok) return;
-    const ads = Object.values(res.ads || {});
+
+    const spaces = res.spaces || {};
     const lists = Object.values(res.lists || {});
+    const activeId = (res.settings || {}).activeSpaceId;
+    const space = spaces[activeId];
+
+    // Only the active space's ads: the popup should mirror the dashboard.
+    const spaceListIds = lists.filter((l) => l.spaceId === activeId);
+    const ids = new Set();
+    for (const l of spaceListIds) for (const id of l.adIds) ids.add(id);
+    const ads = [...ids].map((id) => (res.ads || {})[id]).filter(Boolean);
     const agg = M.aggregate(ads);
-    const topSpend = agg.spend[0] || null;
 
     document.getElementById("summary").textContent =
-      ads.length === 0 ? "Nothing saved yet" : `${ads.length} ads saved`;
+      ads.length === 0
+        ? "Nothing saved yet"
+        : `${ads.length} ads in this space`;
+
+    document.getElementById("space").innerHTML = space
+      ? space.kind === "team"
+        ? `${esc(space.name)} · join code <span class="space-code">${esc(space.code)}</span>`
+        : esc(space.name)
+      : "No space";
 
     const tiles = [
-      { label: "Saved ads", value: M.compact(agg.total) },
+      { label: "Ads saved", value: M.compact(agg.total) },
       { label: "Saved this week", value: M.compact(agg.saves.week) },
       { label: "Advertisers", value: M.compact(agg.advertiserCount) },
       { label: "Active now", value: M.compact(agg.active) },
-      {
-        label: topSpend ? `Spend (${topSpend.currency})` : "Spend",
-        value: topSpend ? M.formatRange(topSpend, "") : "-",
-        note: topSpend
-          ? `${topSpend.count} of ${agg.total} ads`
-          : "not disclosed",
-      },
-      {
-        label: "Impressions",
-        value: agg.impressions ? M.formatRange(agg.impressions, "") : "-",
-        note: agg.impressions
-          ? `${agg.impressions.count} of ${agg.total} ads`
-          : "not disclosed",
-      },
-      { label: "Lists", value: M.compact(lists.length) },
-      {
-        label: "EU reach",
-        value: agg.euReach ? M.compact(agg.euReach) : "-",
-        note: agg.euReachCount ? `${agg.euReachCount} ads` : "EU ads only",
-      },
+      { label: "Running 30d+", value: M.compact(agg.longRunners) },
+      { label: "Lists", value: M.compact(spaceListIds.length) },
     ];
-
-    const esc = (s) =>
-      String(s ?? "").replace(
-        /[&<>"']/g,
-        (c) =>
-          ({
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#39;",
-          })[c],
-      );
 
     document.getElementById("stats").innerHTML = tiles
       .map(
         (s) => `<div class="stat">
           <div class="stat-value">${esc(s.value)}</div>
           <div class="stat-label">${esc(s.label)}</div>
-          ${s.note ? `<div class="stat-note">${esc(s.note)}</div>` : ""}
         </div>`,
       )
       .join("");

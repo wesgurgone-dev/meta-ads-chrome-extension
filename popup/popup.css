@@ -1,18 +1,26 @@
 body {
-  width: 260px;
+  width: 268px;
   margin: 0;
   padding: 14px;
-  background: #0c0e13;
-  color: #e8eaf0;
+  color: #16181d;
   font:
-    13px/1.5 -apple-system,
-    BlinkMacSystemFont,
+    13px/1.5 system-ui,
+    -apple-system,
     "Segoe UI",
     Roboto,
+    Helvetica,
+    Arial,
     sans-serif;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 11px;
+  background-color: #f7f7f5;
+  background-image: radial-gradient(
+    rgba(17, 17, 17, 0.09) 1px,
+    transparent 1px
+  );
+  background-size: 14px 14px;
+  background-position: -1px -1px;
 }
 
 .brand {
@@ -21,18 +29,38 @@ body {
   gap: 10px;
 }
 
-.brand-logo {
-  color: #2d88ff;
-  font-size: 20px;
+.brand-mark {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #2a78d6;
+  flex: none;
 }
 
 .brand-name {
-  font-weight: 800;
+  font-weight: 750;
+  letter-spacing: -0.01em;
 }
 
 .brand-sub {
-  color: #8a91a3;
+  color: #8a8d94;
   font-size: 11px;
+}
+
+.space {
+  background: #eaf2fd;
+  border: 1px solid #cfe0f7;
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #17508f;
+}
+
+.space-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .stats {
@@ -42,27 +70,25 @@ body {
 }
 
 .stat {
-  background: #12151d;
-  border: 1px solid #262b38;
+  background: #fff;
+  border: 1px solid #e3e3df;
   border-radius: 10px;
   padding: 10px;
+  box-shadow: 0 1px 2px rgba(16, 18, 22, 0.06);
 }
 
 .stat-value {
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
 }
 
 .stat-label {
-  color: #8a91a3;
+  color: #8a8d94;
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.stat-note {
-  color: #6f7687;
-  font-size: 9.5px;
+  letter-spacing: 0.055em;
+  font-weight: 650;
   margin-top: 2px;
 }
 
@@ -75,12 +101,16 @@ body {
   color: #fff;
 }
 
+.btn:hover {
+  filter: brightness(0.96);
+}
+
 .btn-primary {
-  background: #2d88ff;
+  background: #2a78d6;
 }
 
 .btn-ghost {
-  background: #181c27;
-  color: #e8eaf0;
-  border: 1px solid #262b38;
+  background: #fff;
+  color: #16181d;
+  border: 1px solid #d3d3cd;
 }
