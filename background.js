@@ -11,6 +11,8 @@
  *   frames_<adId>: { v, adId, source, duration, frames[{t, dataUrl}], error? }
  *   frameQueue: [{ adId, url, source }] - pending video frame extractions
  *   scores:   { [adId]: { adId, rubricVersion, model, axes, overall, ... } }
+ *   canvases: { [canvasId]: { id, spaceId, name, nodes[], edges[], ... } }
+ *   canvasRuns: { [runId]: { id, canvasId, status, inputDigest, shotList[], script } }
  *
  * frames_* keys are deliberately top-level rather than fields on the ad record:
  * getStore() deserialises every ad on every state read, and a few hundred KB of
@@ -604,9 +606,22 @@ const handleSpaceOp = async (msg) => {
       for (const list of Object.values(lists)) {
         if (list.spaceId === msg.spaceId) delete lists[list.id];
       }
+      const { canvases, canvasRuns } = await canvasStore();
+      for (const canvas of Object.values(canvases))
+        if (canvas.spaceId === msg.spaceId) {
+          delete canvases[canvas.id];
+          for (const run of Object.values(canvasRuns))
+            if (run.canvasId === canvas.id) delete canvasRuns[run.id];
+        }
+      await chrome.storage.local.set({ canvases, canvasRuns });
+
       const referenced = new Set();
       for (const list of Object.values(lists))
         for (const id of list.adIds) referenced.add(id);
+      // An ad in no list but on a surviving canvas is still in use. Without
+      // this, deleting one space silently strips live data out from under a
+      // canvas in another one.
+      for (const id of canvasReferencedAds(canvases)) referenced.add(id);
       const reaped = [];
       for (const id of Object.keys(ads))
         if (!referenced.has(id)) {
@@ -787,7 +802,13 @@ const handleListOp = async (msg) => {
   }
 };
 
-/** Remove ads outright: drop them from every list and from the ad store. */
+/**
+ * Remove ads outright: drop them from every list and from the ad store.
+ *
+ * Canvases are deliberately not touched. The user deleted an ad from their
+ * library, not the brief they wrote about it; the node keeps its note and its
+ * snapshot and renders as a reference that is no longer in the library.
+ */
 const handleDeleteAds = async (adIds) => {
   const { ads, lists } = await getStore();
   const remove = new Set(adIds);
@@ -1018,6 +1039,131 @@ const handleFramesRequest = async (adIds) => {
 };
 
 // ---------------------------------------------------------------------------
+// Canvases
+//
+// A canvas is a brief: reference ads as nodes, each with a free-text note
+// saying what to take from it, wired into an output node that generates a shot
+// list and a script.
+//
+// Two decisions in here are load-bearing.
+//
+// A node references an ad by archive id and also carries a text snapshot of it.
+// The snapshot is what makes a deleted ad a degraded node rather than a blank
+// one: the note somebody wrote about an ad is canvas-owned work, and library
+// housekeeping must never destroy it. The snapshot is text only - CDN links are
+// signed and expire within hours, and the local thumbnail is a data URL that
+// would make a twenty-node canvas multiple megabytes and dead within a day.
+//
+// The graph is the only mutable state. A generation is an append-only run with
+// provenance, never an editable field on the canvas, because the output is not
+// actually regenerable: the model is nondeterministic and two of its inputs
+// decay. Re-running is a new draft, not a refresh, and it re-bills.
+// ---------------------------------------------------------------------------
+
+const canvasStore = async () => {
+  const { canvases = {}, canvasRuns = {} } = await chrome.storage.local.get([
+    "canvases",
+    "canvasRuns",
+  ]);
+  return { canvases, canvasRuns };
+};
+
+/** Ids are uuids from birth so they never need remapping on a push. */
+const canvasId = () => crypto.randomUUID();
+
+const handleCanvasOp = async (msg) => {
+  const { canvases, canvasRuns } = await canvasStore();
+  const { settings } = await getStore();
+  const spaceId = msg.spaceId || settings.activeSpaceId;
+
+  switch (msg.op) {
+    case "list": {
+      const mine = Object.values(canvases)
+        .filter((c) => c.spaceId === spaceId)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+      return { ok: true, canvases: mine };
+    }
+    case "get": {
+      const canvas = canvases[msg.canvasId];
+      if (!canvas) return { ok: false, error: "not_found" };
+      const runs = Object.values(canvasRuns)
+        .filter((r) => r.canvasId === canvas.id)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      return { ok: true, canvas, runs };
+    }
+    case "create": {
+      const id = canvasId();
+      const now = Date.now();
+      canvases[id] = {
+        id,
+        spaceId,
+        name: (msg.name || "Untitled canvas").slice(0, 80),
+        // Every canvas is born with the output node, because a graph with
+        // nothing to generate into is not a brief.
+        nodes: [
+          {
+            id: canvasId(),
+            kind: "output",
+            note: "",
+            x: 640,
+            y: 220,
+          },
+        ],
+        edges: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      await chrome.storage.local.set({ canvases });
+      return { ok: true, canvas: canvases[id] };
+    }
+    case "rename": {
+      const canvas = canvases[msg.canvasId];
+      if (!canvas) return { ok: false, error: "not_found" };
+      canvas.name = (msg.name || canvas.name).slice(0, 80);
+      canvas.updatedAt = Date.now();
+      await chrome.storage.local.set({ canvases });
+      return { ok: true, canvas };
+    }
+    case "save": {
+      const canvas = canvases[msg.canvasId];
+      if (!canvas) return { ok: false, error: "not_found" };
+      if (Array.isArray(msg.nodes)) canvas.nodes = msg.nodes;
+      if (Array.isArray(msg.edges)) canvas.edges = msg.edges;
+      canvas.updatedAt = Date.now();
+      await chrome.storage.local.set({ canvases });
+      return { ok: true, canvas };
+    }
+    case "delete": {
+      if (!canvases[msg.canvasId]) return { ok: false, error: "not_found" };
+      delete canvases[msg.canvasId];
+      for (const run of Object.values(canvasRuns))
+        if (run.canvasId === msg.canvasId) delete canvasRuns[run.id];
+      await chrome.storage.local.set({ canvases, canvasRuns });
+      return { ok: true };
+    }
+    case "save_run": {
+      const run = msg.run;
+      if (!run || !run.canvasId) return { ok: false, error: "no_run" };
+      run.id = run.id || canvasId();
+      run.createdAt = run.createdAt || Date.now();
+      canvasRuns[run.id] = run;
+      await chrome.storage.local.set({ canvasRuns });
+      return { ok: true, run };
+    }
+    default:
+      return { ok: false, error: "unknown_op" };
+  }
+};
+
+/** Every ad a canvas points at, so library reaping cannot strip one bare. */
+const canvasReferencedAds = (canvases) => {
+  const out = new Set();
+  for (const canvas of Object.values(canvases))
+    for (const node of canvas.nodes || []) if (node.adId) out.add(node.adId);
+  return out;
+};
+
+// ---------------------------------------------------------------------------
 // Scores
 //
 // Small enough to keep in one object, and deliberately outside getStore() so a
@@ -1123,6 +1269,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return respond(handleScoresGet(msg.adIds || []));
     case "SCORE_SAVE":
       return respond(handleScoreSave(msg.score));
+    case "CANVAS_OP":
+      return respond(handleCanvasOp(msg));
     case "SYNC_SET":
       return respond(handleSyncSet(msg.enabled));
     case "SYNC_PUSH":

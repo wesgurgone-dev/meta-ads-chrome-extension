@@ -188,4 +188,63 @@ begin
 end $$;
 select true as pass;
 
+-- ---- a canvas is team work, and a node edit moves its canvas -----------
+set role authenticated;
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+
+insert into public.canvases (team_id, name)
+select id, 'Hydration brief' from public.teams;
+
+insert into public.canvas_nodes (canvas_id, kind, note)
+select id, 'output', '60s UGC' from public.canvases;
+
+insert into public.canvas_nodes (canvas_id, kind, archive_id, note)
+select id, 'reference', '853222324181295', 'the hook' from public.canvases;
+
+insert into public.canvas_edges (canvas_id, from_node, to_node)
+select c.id, r.id, o.id
+from public.canvases c,
+     public.canvas_nodes r,
+     public.canvas_nodes o
+where r.kind = 'reference' and o.kind = 'output';
+
+\echo '18. a reference node must name an ad, and other kinds must not:'
+do $$
+declare c uuid;
+begin
+  select id into c from public.canvases limit 1;
+  begin
+    insert into public.canvas_nodes (canvas_id, kind, archive_id)
+    values (c, 'note', '853222324181295');
+    raise exception 'a note node kept an archive id';
+  exception when check_violation then null;
+  end;
+end $$;
+select true as pass;
+
+\echo '19. editing a node moves its canvas, so a pull on the canvas sees it:'
+do $$
+declare before timestamptz;
+begin
+  select updated_at into before from public.canvases limit 1;
+  perform pg_sleep(0.05);
+  update public.canvas_nodes set note = 'the hook and the pacing' where kind = 'reference';
+  if (select updated_at from public.canvases limit 1) <= before then
+    raise exception 'the canvas did not move';
+  end if;
+end $$;
+select true as pass;
+
+\echo '20. a teammate sees the canvas, its nodes and its edges:'
+set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+select (select count(*) from public.canvases) = 1
+   and (select count(*) from public.canvas_nodes) = 2
+   and (select count(*) from public.canvas_edges) = 1 as pass;
+
+\echo '21. a non-member sees none of them:'
+set request.jwt.claim.sub = '33333333-3333-3333-3333-333333333333';
+select (select count(*) from public.canvases) = 0
+   and (select count(*) from public.canvas_nodes) = 0
+   and (select count(*) from public.canvas_edges) = 0 as pass;
+
 reset role;

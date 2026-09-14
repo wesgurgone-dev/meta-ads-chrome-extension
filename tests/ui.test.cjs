@@ -313,6 +313,111 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   await dash.locator('.pagetabs .ogui-segments__item:has-text("Library")').click();
   await dash.waitForTimeout(400);
 
+  console.log('--- the workflow canvas holds a brief and survives a reload ---');
+  const onDialog = (d) => d.accept('Probe canvas');
+  dash.on('dialog', onDialog);
+  await dash.locator('.pagetabs .ogui-segments__item:has-text("Workflow")').click();
+  await dash.waitForTimeout(500);
+  ok(await dash.locator('.wf-empty').count() === 1, 'the workflow section starts with no canvas');
+  await dash.locator('button:has-text("New canvas")').click();
+  await dash.waitForTimeout(900);
+  ok(await dash.locator('.wf-node-output').count() === 1,
+     'a new canvas is born with its output node, since a brief needs something to generate into');
+
+  await dash.locator('.wf-bar button:has-text("+ Reference")').click();
+  await dash.waitForTimeout(500);
+  ok(await dash.locator('.wf-picker-item').count() >= 1, 'the picker offers the saved ads');
+  await dash.locator('.wf-picker-item').first().click();
+  await dash.waitForTimeout(700);
+  ok(await dash.locator('.wf-node').count() === 2, 'the reference lands on the canvas');
+  ok(await dash.locator('.wf-edge').count() === 1, 'wired into the output, not left dangling');
+
+  // The frame has to scroll internally. A canvas that grows the page instead is
+  // unusable, and the sidebar is position:sticky so the page will grow if let.
+  const geom = await dash.evaluate(() => ({
+    pane: Math.round(document.querySelector('.wf-pane').getBoundingClientRect().height),
+    doc: Math.round(document.documentElement.scrollHeight),
+    win: window.innerHeight,
+    edgesPE: getComputedStyle(document.querySelector('.wf-edges')).pointerEvents,
+  }));
+  ok(geom.pane > 300, `the pane has real height (${geom.pane}px), not a collapsed surface wrapper`);
+  ok(geom.doc <= geom.win + 2, `the canvas scrolls internally (doc ${geom.doc}, window ${geom.win})`);
+  ok(geom.edgesPE === 'none', 'the edge layer does not swallow clicks meant for nodes');
+
+  await dash.locator('.wf-node-reference textarea').fill('the hook and the first 3 seconds');
+  await dash.waitForTimeout(700);
+
+  const nodeBox = await dash.locator('.wf-node-reference .wf-node-kind').boundingBox();
+  const posBefore = await dash.locator('.wf-node-reference').getAttribute('style');
+  await dash.mouse.move(nodeBox.x + 5, nodeBox.y + 5);
+  await dash.mouse.down();
+  await dash.mouse.move(nodeBox.x + 205, nodeBox.y + 105, { steps: 8 });
+  await dash.mouse.up();
+  await dash.waitForTimeout(600);
+  const posAfter = await dash.locator('.wf-node-reference').getAttribute('style');
+  ok(posBefore !== posAfter, `dragging moves the node (${posBefore} -> ${posAfter})`);
+  ok(/translate\(280px, 160px\)/.test(posAfter),
+     'by exactly the distance dragged, so the grab offset is in world space');
+
+  // The wheel listener must be non-passive, or the dashboard scrolls underneath.
+  const pane = await dash.locator('.wf-pane').boundingBox();
+  await dash.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+  await dash.mouse.wheel(0, -240);
+  await dash.waitForTimeout(250);
+  const wheeled = await dash.evaluate(() => ({
+    t: document.querySelector('.wf-nodes').style.transform,
+    scroll: window.scrollY,
+  }));
+  ok(/translate\(60px, 280px\)/.test(wheeled.t), `the wheel pans the canvas (${wheeled.t})`);
+  ok(wheeled.scroll === 0, 'and the page itself does not scroll');
+
+  // Cutting an edge: this only works because the pane refuses to capture the
+  // pointer unless the press landed on the empty pane. Capture on every press
+  // retargets the click and the edge becomes uncuttable.
+  const mid = await dash.evaluate(() => {
+    const path = document.querySelector('.wf-edge-hit');
+    const p = path.getPointAtLength(path.getTotalLength() / 2);
+    const g = new DOMPoint(p.x, p.y).matrixTransform(path.getScreenCTM());
+    return { x: g.x, y: g.y };
+  });
+  await dash.mouse.click(mid.x, mid.y);
+  await dash.waitForTimeout(600);
+  ok(await dash.locator('.wf-edge').count() === 0, 'clicking an edge cuts it');
+
+  await dash.reload();
+  await dash.waitForTimeout(2200);
+  await dash.locator('.pagetabs .ogui-segments__item:has-text("Workflow")').click();
+  await dash.waitForTimeout(600);
+  ok(await dash.locator('.wf-list li').count() === 1, 'the canvas is listed after a reload');
+  await dash.locator('.wf-list li > button').first().click();
+  await dash.waitForTimeout(700);
+  ok(await dash.locator('.wf-node').count() === 2, 'and reopens with its nodes');
+  ok(await dash.locator('.wf-node-reference textarea').inputValue() === 'the hook and the first 3 seconds',
+     'including the note, which is the part the whole feature is about');
+  // Deleting an ad from the library must not touch a brief written about it.
+  // The note is canvas-owned work; the ad is a foreign reference.
+  await dash.evaluate(
+    () =>
+      new Promise((r) =>
+        chrome.runtime.sendMessage({ type: 'DELETE_ADS', adIds: ['853222324181295'] }, r),
+      ),
+  );
+  await dash.reload();
+  await dash.waitForTimeout(2200);
+  await dash.locator('.pagetabs .ogui-segments__item:has-text("Workflow")').click();
+  await dash.waitForTimeout(600);
+  await dash.locator('.wf-list li > button').first().click();
+  await dash.waitForTimeout(700);
+  ok(await dash.locator('.wf-node').count() === 2, 'deleting the ad leaves the node standing');
+  ok(await dash.locator('.wf-node-reference textarea').inputValue() === 'the hook and the first 3 seconds',
+     'and the note written about it');
+  ok(/no longer in your library/.test(await dash.locator('.wf-node-gone').innerText()),
+     'the node says the ad is gone rather than rendering blank');
+
+  dash.removeListener('dialog', onDialog);
+  await dash.locator('.pagetabs .ogui-segments__item:has-text("Library")').click();
+  await dash.waitForTimeout(400);
+
   console.log('--- team sync status reports each fact separately ---');
   // The browser in CI has no outbound network, so the project is routed here.
   // The three facts fail independently and each has a different fix, which is

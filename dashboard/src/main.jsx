@@ -24,6 +24,7 @@ import { scoreAd } from "../../src/rank/index.js";
 import { deriveTerms, seedProfile } from "../../src/discover/terms.js";
 import { rankCompetitors } from "../../src/discover/score.js";
 import { MAX_TERMS, sweep, sweepFailed } from "../../src/discover/sweep.js";
+import { CanvasView } from "./canvas.jsx";
 import { AXES, AXIS_LABELS } from "../../src/rank/schema.js";
 import {
   LIST_COLORS,
@@ -1492,12 +1493,17 @@ const App = () => {
             items={[
               { value: "library", label: "Library" },
               { value: "discover", label: "Discover" },
+              { value: "workflow", label: "Workflow" },
             ]}
           />
         </Surface>
 
         {ui.page === "discover" && (
           <Discover state={state} lists={lists} activeList={ui.activeList} />
+        )}
+
+        {ui.page === "workflow" && (
+          <CanvasView state={state} teamId={(space && space.teamId) || null} />
         )}
 
         {ui.page === "library" && (
