@@ -42,7 +42,8 @@
 
 html,
 body,
-#root {
+#root,
+.app-shell {
   height: 100%;
 }
 
@@ -475,4 +476,15 @@ select.field option {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* The material's drop shadow lives inside the lens, so the displacement map
+   bends the shadow too and every surface gains a second, offset edge. The
+   shadow belongs to the wrapper, which is not filtered. */
+.surface-lens {
+  box-shadow: none !important;
+}
+
+.surface {
+  box-shadow: 0 2px 10px rgba(10, 6, 24, 0.1);
 }

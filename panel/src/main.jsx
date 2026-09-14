@@ -9,26 +9,11 @@
  * "auto" so anything that does not ask for it falls back to the CSS material,
  * and so a browser without SVG filter support degrades rather than breaking.
  */
-import {
-  StrictMode,
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  Button,
-  Glass,
-  GlassSystemProvider,
-  SdfFilterDefinition,
-  SegmentedControl,
-  Stat,
-  useSdfFilter,
-} from "open-glass-ui";
+import { Button, GlassSystemProvider, SegmentedControl, Stat } from "open-glass-ui";
 import "open-glass-ui/styles.css";
+import { Surface } from "../../src/surface.jsx";
 import {
   askPage,
   daysRunning,
@@ -68,88 +53,6 @@ const Mark = () => (
     <rect x="12" y="3" width="11" height="18" rx="3.2" fill="url(#markGrad)" />
   </svg>
 );
-
-/**
- * Every surface in the panel, and the whole reason React is here.
- *
- * Two things make this more than a prop. First, the displacement map is
- * generated for one exact size and corner radius, so the surface has to be
- * measured, the map built from those numbers, the filter element rendered,
- * and only then can Glass reference it.
- *
- * Second, and the reason for the underlay: Chromium cannot put an SVG filter
- * in backdrop-filter, so the library applies it as a plain filter on the
- * element. On a surface that holds text, that displaces the text along with
- * everything else and the card smears. So the refracting Glass is an empty
- * layer underneath, and the content sits in a sibling above it. The lens bends
- * the page showing through; the words stay where they were put.
- *
- * Until the map is ready, and on any browser that cannot run it, Glass falls
- * back to the CSS material on its own.
- */
-const RADIUS = 18;
-
-const Surface = ({
-  material = "clear",
-  className = "",
-  radius = RADIUS,
-  children,
-  style,
-  ...rest
-}) => {
-  const ref = useRef(null);
-  const id = useId().replace(/:/g, "");
-  const [size, setSize] = useState({ width: 0, height: 0 });
-
-  // Measure before paint, then track resizes: the panel is user-draggable and
-  // the displacement map is generated for one exact size.
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const read = () => {
-      const r = node.getBoundingClientRect();
-      setSize((prev) =>
-        Math.round(prev.width) === Math.round(r.width) &&
-        Math.round(prev.height) === Math.round(r.height)
-          ? prev
-          : { width: r.width, height: r.height },
-      );
-    };
-    read();
-    const ro = new ResizeObserver(read);
-    ro.observe(node);
-    return () => ro.disconnect();
-  }, []);
-
-  const width = Math.round(size.width);
-  const height = Math.round(size.height);
-  const filter = useSdfFilter({
-    id: `ogui-${id}`,
-    width,
-    height,
-    geometry: { kind: "rounded-rect", width, height, cornerRadius: radius },
-  });
-
-  return (
-    <div
-      ref={ref}
-      className={`surface ${className}`.trim()}
-      style={{ ...style, borderRadius: radius }}
-      {...rest}
-    >
-      <SdfFilterDefinition filter={filter} />
-      <Glass
-        aria-hidden="true"
-        className="surface-lens"
-        material={material}
-        renderer={filter.ready ? "sdf-svg" : "auto"}
-        filterId={filter.ready ? filter.filterId : undefined}
-        style={{ borderRadius: radius }}
-      />
-      <div className="surface-content">{children}</div>
-    </div>
-  );
-};
 
 const MiniCard = ({ ad, store, onDownload }) => {
   const thumb = thumbOf(ad);
@@ -537,7 +440,7 @@ const App = () => {
     <GlassSystemProvider
       renderer="auto"
       toasts={false}
-      theme={{ appearance: dark ? "dark" : "light" }}
+      theme={{ appearance: dark ? "dark" : "light", className: "app-shell" }}
     >
       <div id="app">
         <Surface material="regular" className="head">

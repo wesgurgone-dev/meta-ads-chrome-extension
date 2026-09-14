@@ -1210,3 +1210,115 @@ h2,
   transform: rotate(-45deg) translate(1px, -1px);
 }
 
+
+/* ---------------------------------------------------------------------
+   React structure
+
+   Every glass surface is a wrapper with an empty lens layer and a content
+   layer, so rules that used to style a single element now belong on its
+   content layer. See src/surface.jsx for why the two are separate.
+   --------------------------------------------------------------------- */
+
+/* GlassSystemProvider renders its own theme boundary between #root and the
+   page, so the layout container is that element, not #root. */
+#root,
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.surface {
+  position: relative;
+  border-radius: var(--radius);
+}
+
+.surface-lens {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* No height here: the wrapper sizes to its content, and a 100% height against
+   an auto-height parent resolves to zero and collapses the surface. */
+.surface-content {
+  position: relative;
+  z-index: 1;
+}
+
+#sidebar,
+#topbar,
+.metrics,
+.bulkbar,
+.stat,
+.card,
+.viz,
+.modal-card {
+  /* The lens paints the material; the wrapper only holds the shape. */
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+#sidebar .surface-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 14px;
+}
+
+#topbar .surface-content,
+.bulkbar .surface-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.metrics .surface-content {
+  padding: 14px 16px;
+}
+
+.stat .surface-content {
+  padding: 14px 16px;
+}
+
+.card .surface-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#sidebar,
+.card {
+  /* These two are the ones that must fill their track. */
+  display: flex;
+}
+
+#sidebar > .surface-content,
+.card > .surface-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.viz .surface-content {
+  padding: 14px 16px;
+}
+
+.modal-card .surface-content {
+  padding: 22px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+/* The material's drop shadow lives inside the lens, so the displacement map
+   bends the shadow too and every surface gains a second, offset edge. The
+   shadow belongs to the wrapper, which is not filtered. */
+.surface-lens {
+  box-shadow: none !important;
+}
+
+.surface {
+  box-shadow: 0 2px 10px rgba(10, 6, 24, 0.1);
+}

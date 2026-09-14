@@ -25,7 +25,12 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 2. **Load unpacked** and select this `meta-ads-extension/` folder.
 3. Browse `facebook.com/ads/library`, scroll some results, and hit **Save** on any ad.
 
-No build step; plain MV3 JavaScript. Icons are checked in; regenerate with `node icons/generate-icons.mjs`. The mark is a stack of three cards, a swipe file: the front card carries the brand ramp, the two behind it are flat lilac at decreasing opacity, on a transparent background. Generated PNGs, the panel header and both dashboard marks are the same artwork, and a test fails if any of them drifts back to the old blue. Type is Helvetica throughout, weights 400/500/700 only (Helvetica has no real 600, so it would synthesise), with negative tracking applied at the body level and on every control that sets its own font shorthand, plus reduced tracking on uppercase micro-labels. Run the unit tests with `node tests/metrics.test.cjs`.
+The side panel and the dashboard are React, bundled by esbuild into one
+committed IIFE per page (`pnpm`-free: `npm install && node build.mjs`). React is
+there for one reason, OpenGlass UI's SVG/SDF refraction, which needs its runtime
+to generate a displacement map per surface. The content script and the service
+worker are deliberately **not** bundled and stay hand-written: they are the
+parts that run inside Facebook's page. Icons are checked in; regenerate with `node icons/generate-icons.mjs`. The mark is a stack of three cards, a swipe file: the front card carries the brand ramp, the two behind it are flat lilac at decreasing opacity, on a transparent background. Generated PNGs, the panel header and both dashboard marks are the same artwork, and a test fails if any of them drifts back to the old blue. Type is Helvetica throughout, weights 400/500/700 only (Helvetica has no real 600, so it would synthesise), with negative tracking applied at the body level and on every control that sets its own font shorthand, plus reduced tracking on uppercase micro-labels. Run the unit tests with `node tests/metrics.test.cjs`.
 
 ## Look
 
