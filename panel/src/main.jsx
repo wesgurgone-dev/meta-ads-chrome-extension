@@ -447,7 +447,7 @@ const App = () => {
       }}
     >
       <div id="app">
-        <Surface material="regular" className="head">
+        <Surface material="clear" className="head">
           <Mark />
           <div>
             <div className="head-title">Ads Saver</div>

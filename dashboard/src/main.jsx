@@ -767,7 +767,7 @@ const App = () => {
         theme: { accent: "#4510e8", radius: "soft" },
       }}
     >
-      <Surface id="sidebar" className="sidebar" material="regular">
+      <Surface id="sidebar" className="sidebar" material="clear">
         <div className="brand">
           <span className="brand-mark">
             <Mark id="markSidebar" />
@@ -887,7 +887,7 @@ const App = () => {
       </Surface>
 
       <main id="main">
-        <Surface id="topbar" className="topbar" material="regular">
+        <Surface id="topbar" className="topbar" material="clear">
           <input
             id="search"
             type="search"
@@ -936,7 +936,7 @@ const App = () => {
           ))}
         </section>
 
-        <Surface className="metrics" material="regular">
+        <Surface className="metrics" material="clear">
           <div className="metrics-head">
             <h2>Metrics</h2>
             <Button
@@ -1002,7 +1002,7 @@ const App = () => {
         </Surface>
 
         {selected.size > 0 && (
-          <Surface className="bulkbar" material="regular">
+          <Surface className="bulkbar" material="clear">
             <span>{selected.size} selected</span>
             <select id="bulk-list-target" disabled={lists.length === 0} aria-label="Target list">
               {lists.map((l) => (

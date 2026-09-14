@@ -508,3 +508,32 @@ select.field option {
   color: var(--ogui-material-text, currentColor);
   opacity: 0.72;
 }
+
+/* The specular edge.
+
+   The library paints the material but leaves the lit rim to the consumer, and
+   without it translucent glass over a dark ground reads as a flat tinted
+   rectangle. A bright hairline along the top and a soft inner glow at the
+   top-left is what makes it look like light catching a curved surface. */
+.surface-lens::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--ogui-material-highlight) 22%, transparent) 0%,
+    transparent 38%
+  );
+  box-shadow: inset 0 1px 0
+    color-mix(in srgb, var(--ogui-material-highlight) 55%, transparent);
+}
+
+/* The segmented recipe fills its track with rgb(0 0 0 / .15), which reads as a
+   grey slab against light glass. Let the track take the material instead; the
+   selected item still carries its own fill, so the control stays legible. */
+.ogui-segments {
+  background: transparent;
+  box-shadow: none;
+}
