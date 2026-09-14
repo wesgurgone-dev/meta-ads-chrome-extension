@@ -119,4 +119,35 @@ begin
 end $$;
 select true as pass;
 
+-- ---- the AI meter cannot be cleared by the caller it limits ------------
+set role authenticated;
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+
+\echo '11. recording usage increments, and reads back per user:'
+select public.ai_usage_record(100);
+select public.ai_usage_record(50);
+select public.ai_usage_today() = 2 as pass;
+
+\echo '12. a second user has their own counter:'
+set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+select public.ai_usage_today() = 0 as pass;
+
+\echo '13. nobody can lower their own count:'
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+do $$
+begin
+  begin
+    update public.ai_usage set calls = 0;
+    -- No update policy exists, so this changes nothing rather than erroring.
+    if public.ai_usage_today() <> 2 then
+      raise exception 'the meter was cleared';
+    end if;
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select public.ai_usage_today() = 2 as pass;
+
+\echo '14. and cannot read anyone else:'
+select count(*) = 1 as pass from public.ai_usage;
+
 reset role;

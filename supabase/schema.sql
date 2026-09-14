@@ -286,3 +286,65 @@ grant execute on function public.join_team(text) to authenticated;
 
 revoke all on function public.is_team_member(uuid) from public, anon;
 grant execute on function public.is_team_member(uuid) to authenticated;
+
+-- ---------------------------------------------------------------- ai usage
+--
+-- Metering for the Claude proxy in supabase/functions/claude. Rows are per
+-- user per day. A caller can read and add to their own and nobody else's, so
+-- the ceiling cannot be cleared by the client that is subject to it.
+
+create table if not exists public.ai_usage (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  day     date not null default current_date,
+  calls   int  not null default 0,
+  tokens  bigint not null default 0,
+  primary key (user_id, day)
+);
+
+alter table public.ai_usage enable row level security;
+
+drop policy if exists ai_usage_self on public.ai_usage;
+create policy ai_usage_self on public.ai_usage
+  for select using (user_id = auth.uid());
+
+grant select on public.ai_usage to authenticated;
+revoke all on public.ai_usage from anon;
+
+create or replace function public.ai_usage_today()
+returns int
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce(
+    (select calls from public.ai_usage
+     where user_id = auth.uid() and day = current_date),
+    0);
+$$;
+
+-- Definer, and deliberately additive only: there is no path here that lowers a
+-- count, so a caller cannot reset their own meter.
+create or replace function public.ai_usage_record(tokens bigint default 0)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'sign in first';
+  end if;
+
+  insert into public.ai_usage (user_id, day, calls, tokens)
+  values (auth.uid(), current_date, 1, greatest(tokens, 0))
+  on conflict (user_id, day) do update
+    set calls  = public.ai_usage.calls + 1,
+        tokens = public.ai_usage.tokens + greatest(excluded.tokens, 0);
+end;
+$$;
+
+revoke all on function public.ai_usage_today() from public, anon;
+revoke all on function public.ai_usage_record(bigint) from public, anon;
+grant execute on function public.ai_usage_today() to authenticated;
+grant execute on function public.ai_usage_record(bigint) to authenticated;
