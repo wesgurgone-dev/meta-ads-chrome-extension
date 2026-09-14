@@ -1431,16 +1431,38 @@ h2,
   letter-spacing: -0.01em;
 }
 
-.score-overall strong {
-  font-size: 26px;
-  font-weight: 600;
+/* One number, red at 0 through green at 10. It sits on the creative, so it
+   carries its own contrast rather than borrowing the card's. */
+.score-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border-radius: 9px;
+  color: #fff;
+  font-weight: 650;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
 
-.score-overall span {
-  opacity: 0.5;
-  font-size: 13px;
-  margin-left: 2px;
+.score-badge-lg {
+  position: static;
+  min-width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  font-size: 24px;
+}
+
+.score-badge-failed {
+  background: rgba(127, 127, 127, 0.55);
 }
 
 .score-axes {

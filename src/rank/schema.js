@@ -88,6 +88,24 @@ export const validateScore = (parsed) => {
  */
 export const WEIGHTS = { hook: 0.35, utility: 0.3, succinctness: 0.15, production: 0.2 };
 
+/**
+ * The colour of a score: bright red at 0, bright green at 10.
+ *
+ * The point is that the number reads before it is read - a 2 should look wrong
+ * from across the room. A straight hue sweep does not deliver that: hue 26 is
+ * orange, so a 2 came out looking like a warning rather than a failure. The
+ * curve holds red across the bottom of the scale and green across the top,
+ * which matches how the bands are actually used. Saturation and lightness stay
+ * constant so hue is the only signal, and both ends stay legible on a light and
+ * a dark ground.
+ */
+export const scoreColor = (score) => {
+  if (score == null || Number.isNaN(Number(score))) return "hsl(0, 0%, 55%)";
+  const clamped = Math.max(0, Math.min(10, Number(score)));
+  const hue = Math.round(130 * Math.pow(clamped / 10, 1.6));
+  return `hsl(${hue}, 78%, 44%)`;
+};
+
 export const overallScore = (axes) => {
   if (!axes) return null;
   let total = 0;

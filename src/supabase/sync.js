@@ -78,6 +78,45 @@ export const createTeam = async (spaceId, name) => {
   }
 };
 
+/**
+ * A brand new team space, rather than converting the one you are standing in.
+ *
+ * Converting was the only route before, and it had a trap: once the active
+ * space was linked, the option disappeared and there was no way to make a
+ * second team at all. Creating a fresh space has no such state to be in, and it
+ * is also what "make a team space" sounds like it should do - the personal
+ * library stays personal.
+ */
+export const createTeamSpace = async (name) => {
+  const created = await send({ type: "SPACE_OP", op: "create", name, kind: "team" });
+  if (!created || !created.ok)
+    return { ok: false, error: (created && created.error) || "Could not create the space." };
+
+  const team = await createTeam(created.space.id, name);
+  if (!team.ok) {
+    // The local space exists and is usable; it just is not shared yet. Say so
+    // rather than leaving a team space that silently never syncs.
+    return { ok: false, error: `${team.error} The space was created locally.` };
+  }
+  return { ok: true, team: team.team, space: created.space };
+};
+
+/**
+ * Join a team into a new space, for when the space you are standing in already
+ * belongs to one. Joining in place would silently re-point it at a different
+ * team and strand everything already synced to the first.
+ */
+export const joinTeamSpace = async (code) => {
+  const created = await send({ type: "SPACE_OP", op: "create", name: "Team space", kind: "team" });
+  if (!created || !created.ok)
+    return { ok: false, error: (created && created.error) || "Could not create the space." };
+  const joined = await joinTeam(created.space.id, code);
+  if (!joined.ok) return joined;
+  if (joined.team && joined.team.name)
+    await send({ type: "SPACE_OP", op: "rename", spaceId: created.space.id, name: joined.team.name });
+  return { ...joined, space: created.space };
+};
+
 export const joinTeam = async (spaceId, code) => {
   try {
     const { supabase } = await requireClient();

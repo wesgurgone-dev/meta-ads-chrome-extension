@@ -60,6 +60,17 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 20000 });
   const extId = new URL(sw.url()).host;
 
+  // The worker is a module, which Playwright attaches to earlier than a classic
+  // one - early enough that the extension bindings are not installed yet and
+  // the first evaluate sees `chrome` as undefined. Wait for the binding rather
+  // than for a fixed delay.
+  for (let i = 0; i < 100; i++) {
+    const ready = await sw.evaluate(() => typeof chrome !== 'undefined' && !!chrome.runtime)
+      .catch(() => false);
+    if (ready) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
   const errors = [];
   const watch = (p, tag) => {
     p.on('pageerror', (e) => errors.push(`${tag} pageerror: ${e.message}`));
@@ -263,7 +274,7 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(fit.fit === 'contain', 'creatives letterbox rather than stretch');
   ok(fit.h > 0 && fit.h <= fit.vh * 0.6, `a 9:16 creative fits (${fit.h}px of ${fit.vh}px)`);
 
-  console.log('--- an ad can be scored from its detail view ---');
+  console.log('--- every saved ad is queued for scoring, not waiting on a click ---');
   // Seed one saved ad straight into the store. The dashboard is otherwise
   // empty in this harness, and a card is needed to open a detail view at all.
   await sw.evaluate(async () => {
@@ -284,20 +295,76 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
     await chrome.storage.local.set({ ads, lists });
   });
   await dash.reload();
-  await dash.waitForTimeout(1800);
+  await dash.waitForTimeout(2500);
   ok(await dash.locator('.grid .card').count() === 1, 'the seeded ad renders as a card');
+
+  // Opening the dashboard restarts scoring for anything unscored. There is no
+  // network here, so what is asserted is that it was attempted and the reason
+  // recorded - not that a score came back.
+  await dash.waitForTimeout(2500);
+  const queue = await sw.evaluate(() =>
+    chrome.storage.local.get(['scoreQueue', 'scoreBlock', 'scores']));
+  ok(
+    (queue.scoreQueue || []).length > 0 || queue.scoreBlock || (queue.scores || {})['853222324181295'],
+    'the ad was queued for scoring without anybody asking',
+  );
+
+  console.log('--- a score reads as one number, red through green ---');
+  await sw.evaluate(async () => {
+    const axis = (band, score) => ({ evidence: 'a legible claim by frame 1', frame_index: 0, band, score });
+    await chrome.storage.local.set({
+      scores: {
+        '853222324181295': {
+          adId: '853222324181295', rubricVersion: 'rubric_v1', model: 'claude-opus-5',
+          axes: { hook: axis('strong', 8), utility: axis('strong', 8),
+                  succinctness: axis('strong', 7), production: axis('strong', 8) },
+          overall: 7.9, frames: 8, frameKind: 'video', createdAt: Date.now(),
+        },
+      },
+    });
+  });
+  await dash.waitForTimeout(1200);
+  const badge = await dash.evaluate(() => {
+    const el = document.querySelector('.grid .card .score-badge');
+    if (!el) return null;
+    const bg = getComputedStyle(el).backgroundColor;
+    const box = el.getBoundingClientRect();
+    const media = document.querySelector('.grid .card .card-media').getBoundingClientRect();
+    return { text: el.textContent.trim(), bg, onMedia: box.top >= media.top - 1 && box.left >= media.left - 1 };
+  });
+  ok(badge !== null, 'the card carries a score badge');
+  ok(badge.text === '8', `showing one whole number (${badge && badge.text})`);
+  ok(badge.onMedia, 'sitting on the creative, where it reads at a glance');
+
+  // Hue is the whole signal: a 2 has to look wrong next to a 9.
+  const hues = await dash.evaluate(() => {
+    const probe = document.createElement('span');
+    document.body.appendChild(probe);
+    const read = (score) => {
+      probe.style.background = `hsl(${Math.round(130 * Math.pow(score / 10, 1.6))}, 78%, 44%)`;
+      const [r, g] = getComputedStyle(probe).backgroundColor.match(/\d+/g).map(Number);
+      return { r, g };
+    };
+    const out = { low: read(2), high: read(9) };
+    probe.remove();
+    return out;
+  });
+  ok(hues.low.r > hues.low.g, `a low score is red (${JSON.stringify(hues.low)})`);
+  ok(hues.high.g > hues.high.r, `a high score is green (${JSON.stringify(hues.high)})`);
+
   await dash.locator('.grid .card .card-media').first().click();
-  await dash.waitForTimeout(500);
-  const score = {
-    panel: await dash.locator('.score-panel').count(),
-    button: (await dash.locator('.score-panel button').first().textContent()) || '',
-    axes: await dash.locator('.score-axes li').count(),
-  };
-  ok(score.panel === 1, 'the detail view offers a score');
-  ok(/Score this ad/.test(score.button), `and starts with the offer, not a number: ${score.button}`);
-  // Nothing has been scored, and scoring costs money: the panel must never
-  // call the model just because a modal opened.
-  ok(score.axes === 0, 'opening the modal scores nothing by itself');
+  await dash.waitForTimeout(700);
+  const detail = await dash.evaluate(() => ({
+    big: (document.querySelector('.score-badge-lg') || {}).textContent,
+    axes: document.querySelectorAll('.score-axes li').length,
+    offers: [...document.querySelectorAll('.score-panel button')].map((b) => b.textContent.trim()),
+  }));
+  ok(detail.big === '8', `the detail view leads with the same number (${detail.big})`);
+  ok(detail.axes === 4, `with the four axes behind it (${detail.axes})`);
+  ok(
+    detail.offers.some((t) => /Score again/.test(t)) && !detail.offers.some((t) => /Score this ad/.test(t)),
+    `and the only button is a deliberate re-score (${detail.offers.join(', ')})`,
+  );
   await dash.locator('.modal-close').click();
   await dash.waitForTimeout(300);
 

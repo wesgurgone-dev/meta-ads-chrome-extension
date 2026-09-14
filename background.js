@@ -11,6 +11,9 @@
  *   frames_<adId>: { v, adId, source, duration, frames[{t, dataUrl}], error? }
  *   frameQueue: [{ adId, url, source }] - pending video frame extractions
  *   scores:   { [adId]: { adId, rubricVersion, model, axes, overall, ... } }
+ *             or { adId, failed, error } when an ad could not be scored
+ *   scoreQueue: [adId] - ads waiting to be scored
+ *   scoreBlock: { code, message } - why the queue stopped, when it has
  *   canvases: { [canvasId]: { id, spaceId, name, nodes[], edges[], ... } }
  *   canvasRuns: { [runId]: { id, canvasId, status, inputDigest, shotList[], script } }
  *
@@ -21,6 +24,16 @@
  * Ads are stored once and referenced by lists, so the same ad saved into two
  * lists is one record. A space's ads are the union of its lists' adIds.
  */
+
+import { DEFAULT_CONFIG } from "./src/supabase/config.js";
+import {
+  FAILURE,
+  failureMessage,
+  isBlocking,
+  readRemoteScore,
+  scoreAd as scoreAdWithProxy,
+  writeRemoteScore,
+} from "./src/rank/call.js";
 
 const THUMB_MAX_BYTES = 160 * 1024;
 
@@ -148,9 +161,11 @@ chrome.runtime.onInstalled.addListener(() => {
   ensureBootstrapped();
 });
 
-// A worker death mid-batch leaves jobs in the queue; any later wake resumes it.
+// A worker death mid-batch leaves jobs in either queue; any later wake resumes
+// them.
 chrome.runtime.onStartup.addListener(() => {
   pumpFrames();
+  pumpScores();
 });
 
 // ---------------------------------------------------------------------------
@@ -320,10 +335,15 @@ const pumpFrames = async () => {
       await chrome.storage.local.set({
         frameQueue: current.filter((j) => j.adId !== job.adId),
       });
+
+      // Score it now that there is something to look at. Queuing the score at
+      // save time instead would race the extraction and score the thumbnail.
+      await enqueueScores([job.adId]);
     }
   } finally {
     framesPumping = false;
     closeOffscreenLater();
+    pumpScores();
   }
 };
 
@@ -436,6 +456,12 @@ const handleSaveAds = async (incoming, listId) => {
   lists[target.id] = target;
   await chrome.storage.local.set({ ads, lists });
 
+  // Ads whose frames are being extracted are queued for scoring by the
+  // extractor instead, so the score sees the frames rather than racing them.
+  const framing = new Set(
+    settings.captureFrames === false ? [] : toFrames.map((job) => job.adId),
+  );
+
   // Thumbnails are best-effort and must never delay the save response.
   (async () => {
     let dirty = false;
@@ -449,6 +475,12 @@ const handleSaveAds = async (incoming, listId) => {
       }
     }
     if (dirty) await chrome.storage.local.set({ ads });
+
+    // Score the ads that are not waiting on frame extraction, and only once
+    // their thumbnail has landed: a still ad queued before this would reach the
+    // scorer with nothing to look at and be marked permanently unscorable.
+    const scoreNow = toThumb.filter((id) => !framing.has(id));
+    if (scoreNow.length) await enqueueScores(scoreNow);
   })();
 
   // Frames are the same class of work as thumbnails - best effort, after the
@@ -1193,6 +1225,161 @@ const canvasReferencedAds = (canvases) => {
 // silently so.
 // ---------------------------------------------------------------------------
 
+/**
+ * Everything needed to talk to the project: the URL, the publishable key, the
+ * caller's access token and the team the active space belongs to.
+ *
+ * The token is read straight out of the session supabase-js persisted, and
+ * deliberately never refreshed here. Supabase rotates refresh tokens, so a
+ * worker that refreshed without writing the new session back would invalidate
+ * the one the pages hold. An expired token stops the queue instead, and any
+ * page opening later - which does refresh, and does persist - restarts it.
+ */
+const scoringContext = async () => {
+  const { supabaseConfig = {}, supabaseSession = null } = await chrome.storage.local.get([
+    "supabaseConfig",
+    "supabaseSession",
+  ]);
+  const url = supabaseConfig.url || DEFAULT_CONFIG.url;
+  const anonKey = supabaseConfig.anonKey || DEFAULT_CONFIG.anonKey;
+
+  let token = null;
+  try {
+    const session =
+      typeof supabaseSession === "string" ? JSON.parse(supabaseSession) : supabaseSession;
+    const raw = session && (session.currentSession || session);
+    if (raw && raw.access_token) {
+      const expiresAt = Number(raw.expires_at || 0) * 1000;
+      // A minute of slack: a token about to expire mid-call is not worth
+      // spending an image-heavy request on.
+      if (!expiresAt || expiresAt > Date.now() + 60000) token = raw.access_token;
+    }
+  } catch (err) {
+    /* an unreadable session is the same as no session */
+  }
+
+  const { spaces, settings } = await getStore();
+  const space = spaces[settings.activeSpaceId];
+  return { url, anonKey, token, teamId: (space && space.teamId) || null };
+};
+
+let scorePumping = false;
+
+/**
+ * Queue an ad for scoring. Every save goes through here: scoring is not
+ * something the user has to remember to ask for, and an unscored library is
+ * the same as no scores at all.
+ */
+const enqueueScores = async (adIds) => {
+  if (!adIds.length) return;
+  const { scoreQueue = [], scores = {} } = await chrome.storage.local.get([
+    "scoreQueue",
+    "scores",
+  ]);
+  const known = new Set(scoreQueue);
+  const next = [...scoreQueue];
+  for (const id of adIds) {
+    if (known.has(id) || scores[id]) continue;
+    known.add(id);
+    next.push(id);
+  }
+  if (next.length === scoreQueue.length) return;
+  await chrome.storage.local.set({ scoreQueue: next });
+  pumpScores();
+};
+
+/**
+ * Drain the queue, one ad at a time.
+ *
+ * Two kinds of failure, and they are not handled the same way. A missing
+ * deployment, an expired session, a daily cap or no network means every
+ * remaining job would fail the same way, so the queue stops and records why. A
+ * bad reply or an ad with nothing to look at is that ad's problem, so it is
+ * recorded against the ad and the queue carries on.
+ */
+const pumpScores = async () => {
+  if (scorePumping) return;
+  scorePumping = true;
+  try {
+    for (;;) {
+      const { scoreQueue = [] } = await chrome.storage.local.get("scoreQueue");
+      const adId = scoreQueue[0];
+      if (!adId) {
+        await setScoreBlock(null);
+        break;
+      }
+
+      const { ads } = await getStore();
+      const ad = ads[adId];
+      if (!ad) {
+        await dropFromScoreQueue(adId);
+        continue;
+      }
+
+      const ctx = await scoringContext();
+      if (!ctx.token) {
+        await setScoreBlock(FAILURE.SIGNED_OUT);
+        break;
+      }
+
+      // Somebody on the team may already have paid for this one.
+      const shared = await readRemoteScore({ ...ctx, adId });
+      if (shared) {
+        await handleScoreSave(shared);
+        await dropFromScoreQueue(adId);
+        continue;
+      }
+
+      const frames = await getFrames(adId);
+      const res = await scoreAdWithProxy(ad, { frames, ...ctx });
+
+      if (res.ok) {
+        await handleScoreSave(res.score);
+        await writeRemoteScore({ ...ctx, score: res.score });
+        await dropFromScoreQueue(adId);
+        await setScoreBlock(null);
+        continue;
+      }
+
+      if (isBlocking(res.code)) {
+        await setScoreBlock(res.code, res.detail);
+        break;
+      }
+
+      // This ad cannot be scored. Record why against it, so the card shows a
+      // reason rather than staying blank forever and looking like a queue that
+      // never ran.
+      await handleScoreSave({
+        adId,
+        rubricVersion: null,
+        failed: res.code,
+        error: failureMessage(res.code, res.detail),
+        createdAt: Date.now(),
+      });
+      await dropFromScoreQueue(adId);
+    }
+  } finally {
+    scorePumping = false;
+  }
+};
+
+const dropFromScoreQueue = async (adId) => {
+  const { scoreQueue = [] } = await chrome.storage.local.get("scoreQueue");
+  await chrome.storage.local.set({ scoreQueue: scoreQueue.filter((id) => id !== adId) });
+};
+
+const setScoreBlock = async (code, detail) => {
+  const { scoreBlock = null } = await chrome.storage.local.get("scoreBlock");
+  if (!code) {
+    if (scoreBlock) await chrome.storage.local.remove("scoreBlock");
+    return;
+  }
+  if (scoreBlock && scoreBlock.code === code) return;
+  await chrome.storage.local.set({
+    scoreBlock: { code, message: failureMessage(code, detail), at: Date.now() },
+  });
+};
+
 const handleScoresGet = async (adIds) => {
   const { scores = {} } = await chrome.storage.local.get("scores");
   if (!adIds || !adIds.length) return { ok: true, scores };
@@ -1207,6 +1394,27 @@ const handleScoreSave = async (score) => {
   scores[score.adId] = score;
   await chrome.storage.local.set({ scores });
   return { ok: true };
+};
+
+/**
+ * Score these now, or re-score them. Also the retry path: any page that opens
+ * calls this, which is what restarts a queue that stopped because the session
+ * had expired - the page refreshes the session on load, the worker cannot.
+ */
+const handleScoreRequest = async (adIds, force) => {
+  if (force) await dropScores(adIds);
+  await chrome.storage.local.remove("scoreBlock");
+  const { ads } = await getStore();
+  await enqueueScores(adIds.filter((id) => ads[id]));
+  return { ok: true, queued: adIds.length };
+};
+
+const handleScoreStatus = async () => {
+  const { scoreQueue = [], scoreBlock = null } = await chrome.storage.local.get([
+    "scoreQueue",
+    "scoreBlock",
+  ]);
+  return { ok: true, pending: scoreQueue.length, block: scoreBlock };
 };
 
 const dropScores = async (adIds) => {
@@ -1298,6 +1506,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return respond(handleScoresGet(msg.adIds || []));
     case "SCORE_SAVE":
       return respond(handleScoreSave(msg.score));
+    case "SCORE_REQUEST":
+      return respond(handleScoreRequest(msg.adIds || [], msg.force));
+    case "SCORE_STATUS":
+      return respond(handleScoreStatus());
     case "CANVAS_OP":
       return respond(handleCanvasOp(msg));
     case "APPLY_CANVAS_SYNC":

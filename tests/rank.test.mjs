@@ -16,9 +16,18 @@ import {
   SCORE_SCHEMA,
   WEIGHTS,
   overallScore,
+  scoreColor,
   validateScore,
 } from "../src/rank/schema.js";
-import { adFacts } from "../src/rank/index.js";
+import {
+  FAILURE,
+  adFacts,
+  buildMessages,
+  collectImages,
+  failureMessage,
+  isBlocking,
+  splitDataUrl,
+} from "../src/rank/call.js";
 
 let pass = 0,
   fail = 0;
@@ -103,6 +112,66 @@ ok(/Advertiser: Hyro/.test(facts), "the advertiser");
 ok(/Body copy: Three minerals, no sugar\./.test(facts), "the body copy, which carries the pitch");
 ok(/Call to action: Shop now/.test(facts), "and the call to action");
 ok(!/undefined|null/.test(facts), "missing fields are dropped rather than rendered as null");
+
+console.log("\n--- one number, red through green ---");
+const rgb = (css) => css.match(/\d+/g).map(Number);
+eq(rgb(scoreColor(0))[0], 0, "the hue at 0 is red");
+ok(/hsl\(0, 78%/.test(scoreColor(0)), `0 is red (${scoreColor(0)})`);
+ok(/hsl\(130, 78%/.test(scoreColor(10)), `10 is green (${scoreColor(10)})`);
+ok(/hsl\(43, 78%/.test(scoreColor(5)), `5 is amber, not the linear midpoint (${scoreColor(5)})`);
+// The curve is the whole point: a straight sweep put a 2 at orange, which reads
+// as a warning rather than as a failure.
+const hueOf = (n) => Number(scoreColor(n).match(/hsl\((\d+)/)[1]);
+ok(hueOf(2) < 15, `a 2 is still red (hue ${hueOf(2)})`);
+ok(hueOf(3) < 25, `and a 3 is red-orange (hue ${hueOf(3)})`);
+ok(hueOf(8) > 85, `an 8 is green (hue ${hueOf(8)})`);
+for (let n = 1; n <= 10; n++)
+  ok(hueOf(n) > hueOf(n - 1), `${n} is greener than ${n - 1}`);
+eq(scoreColor(7.9), scoreColor(7.9), "and it is a pure function of the score");
+ok(/0%/.test(scoreColor(null)), "no score is grey, not red: absent is not bad");
+eq(scoreColor(99), scoreColor(10), "a score above the scale clamps rather than wrapping the hue");
+eq(scoreColor(-5), scoreColor(0), "and so does one below it");
+
+console.log("\n--- a failure is a code, so the queue can tell them apart ---");
+ok(isBlocking(FAILURE.NOT_DEPLOYED), "a missing deployment stops the whole queue");
+ok(isBlocking(FAILURE.SIGNED_OUT), "so does an expired session");
+ok(isBlocking(FAILURE.RATE_LIMITED), "and the daily cap");
+ok(isBlocking(FAILURE.OFFLINE), "and no network");
+ok(!isBlocking(FAILURE.NOTHING_TO_SEE), "an ad with no creative is that ad's problem, not the queue's");
+ok(!isBlocking(FAILURE.BAD_REPLY), "and so is a reply that would not parse");
+ok(
+  /supabase functions deploy claude/.test(failureMessage(FAILURE.NOT_DEPLOYED)),
+  "the 404 names the command that fixes it, rather than reading as a broken feature",
+);
+ok(/Sign in/.test(failureMessage(FAILURE.SIGNED_OUT)), "and being signed out says so");
+
+console.log("\n--- what the model is shown ---");
+const jpeg = "data:image/jpeg;base64,AAECAw==";
+eq(splitDataUrl(jpeg), { mediaType: "image/jpeg", data: "AAECAw==" }, "a data URL splits into type and payload");
+eq(splitDataUrl("https://cdn/x.jpg"), null, "a plain URL does not, because the API takes bytes");
+eq(splitDataUrl(""), null, "and nothing is nothing");
+
+const withFrames = collectImages(
+  { id: "1", thumbDataUrl: jpeg },
+  { frames: [{ t: 0, dataUrl: jpeg }, { t: 1.5, dataUrl: jpeg }] },
+);
+eq(withFrames.kind, "video", "frames win over the thumbnail");
+eq(withFrames.images.length, 2, "and all of them are sent");
+const stillOnly = collectImages({ id: "1", thumbDataUrl: jpeg }, { frames: [], error: "video too large" });
+eq(stillOnly.kind, "still", "an ad whose frames failed falls back to the thumbnail");
+ok(/video too large/.test(stillOnly.note), "and the prompt is told why it is looking at one image");
+eq(collectImages({ id: "1" }, null).images.length, 0, "an ad with nothing to look at yields nothing");
+
+const messages = buildMessages({ id: "1", pageName: "Hyro", body: "Three minerals." }, withFrames);
+eq(messages.length, 1, "one user message");
+const kinds = messages[0].content.map((b) => b.type);
+eq(kinds[0], "text", "the ad copy leads");
+eq(kinds.filter((k) => k === "image").length, 2, "then the frames");
+eq(kinds[kinds.length - 1], "text", "and the instruction comes last");
+ok(
+  messages[0].content.some((b) => b.type === "text" && /Frame 1 at 1.5s/.test(b.text)),
+  "each frame is labelled with its timestamp, which is what makes frame_index mean anything",
+);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -19,13 +19,20 @@ import {
   verifyCode,
 } from "../../src/supabase/client.js";
 import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../../src/supabase/config.js";
-import { createTeam, joinTeam, pull, push, watch } from "../../src/supabase/sync.js";
-import { scoreAd } from "../../src/rank/index.js";
+import {
+  createTeam,
+  createTeamSpace,
+  joinTeam,
+  joinTeamSpace,
+  pull,
+  push,
+  watch,
+} from "../../src/supabase/sync.js";
 import { deriveTerms, seedProfile } from "../../src/discover/terms.js";
 import { rankCompetitors } from "../../src/discover/score.js";
 import { MAX_TERMS, sweep, sweepFailed } from "../../src/discover/sweep.js";
 import { CanvasView } from "./canvas.jsx";
-import { AXES, AXIS_LABELS } from "../../src/rank/schema.js";
+import { AXES, AXIS_LABELS, scoreColor } from "../../src/rank/schema.js";
 import {
   LIST_COLORS,
   M,
@@ -197,7 +204,7 @@ const StackChart = ({ title, sub, rows }) => {
 
 /* ---------- ad card ---------- */
 
-const AdCard = ({ ad, state, selected, onToggle, onOpen, activeList }) => {
+const AdCard = ({ ad, state, selected, onToggle, onOpen, activeList, score }) => {
   const [label, setLabel] = useState("Download");
   const thumb = thumbFor(ad);
   const format = adFormat(ad);
@@ -230,6 +237,7 @@ const AdCard = ({ ad, state, selected, onToggle, onOpen, activeList }) => {
         aria-label={`Select ${ad.pageName || "ad"}`}
       />
       <div className="card-media" onClick={() => onOpen(ad)}>
+        <ScoreBadge score={score} />
         {thumb ? (
           <img src={thumb} loading="lazy" alt="" />
         ) : (
@@ -292,56 +300,80 @@ const Modal = ({ onClose, children }) => (
 );
 
 /**
- * What the model thought of one ad.
+ * One number, coloured.
  *
- * Three things this deliberately shows rather than hides. The band, because a 7
- * and an 8 are not a meaningful difference and a bare number implies they are.
- * The evidence, because a score with no citation is a vibe. And the frame count,
- * because an ad scored from one thumbnail is not the same measurement as one
- * scored from eight frames and should not look like it.
+ * Bright red at 0 through bright green at 10, because the point of a score on a
+ * grid of eighty ads is that it reads before it is read. The four axes still
+ * exist and still decide the number; they are detail, and detail belongs in the
+ * detail view rather than on every card.
  */
-const ScorePanel = ({ ad, teamId }) => {
+const ScoreBadge = ({ score, size = "sm" }) => {
+  if (!score) return null;
+  if (score.failed)
+    return (
+      <span className={`score-badge score-badge-${size} score-badge-failed`} title={score.error}>
+        -
+      </span>
+    );
+  if (score.overall == null) return null;
+  return (
+    <span
+      className={`score-badge score-badge-${size}`}
+      style={{ background: scoreColor(score.overall) }}
+      title={`${score.overall} out of 10`}
+    >
+      {Math.round(score.overall)}
+    </span>
+  );
+};
+
+/**
+ * The breakdown behind the number.
+ *
+ * Nothing here starts a scoring call: every ad is scored when it is saved, by
+ * the service worker, so by the time anyone opens this the answer either exists
+ * or there is a reason it does not. The only button is a deliberate re-score.
+ */
+const ScorePanel = ({ ad }) => {
   const [score, setScore] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const [status, setStatus] = useState(null);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    let live = true;
-    send({ type: "SCORES_GET", adIds: [ad.id] }).then((res) => {
-      if (!live) return;
-      setScore((res && res.scores && res.scores[ad.id]) || null);
-      setLoaded(true);
-    });
-    return () => {
-      live = false;
-    };
+  const refresh = useCallback(async () => {
+    const [got, stat] = await Promise.all([
+      send({ type: "SCORES_GET", adIds: [ad.id] }),
+      send({ type: "SCORE_STATUS" }),
+    ]);
+    setScore((got && got.scores && got.scores[ad.id]) || null);
+    setStatus(stat || null);
+    setLoaded(true);
   }, [ad.id]);
 
-  const run = async (force) => {
-    setBusy(true);
-    setError(null);
-    const res = await scoreAd(ad, { teamId, force });
-    setBusy(false);
-    if (res.ok) setScore(res.score);
-    else setError(res.error);
-  };
+  useEffect(() => {
+    refresh();
+    // The worker writes scores as they land, so the panel follows storage
+    // rather than polling.
+    const onChange = (changes, area) => {
+      if (area === "local" && (changes.scores || changes.scoreQueue || changes.scoreBlock))
+        refresh();
+    };
+    chrome.storage.onChanged.addListener(onChange);
+    return () => chrome.storage.onChanged.removeListener(onChange);
+  }, [refresh]);
 
   if (!loaded) return null;
+
+  const blocked = status && status.block;
+  const queued = status && status.pending > 0 && !score;
 
   return (
     <div className="score-panel">
       <div className="score-head">
         <h3>Score</h3>
-        {score ? (
-          <div className="score-overall">
-            <strong>{score.overall}</strong>
-            <span>/10</span>
-          </div>
-        ) : null}
+        {score && !score.failed ? <ScoreBadge score={score} size="lg" /> : null}
       </div>
 
-      {score ? (
+      {score && !score.failed ? (
         <>
           <ul className="score-axes">
             {AXES.map((axis) => {
@@ -365,34 +397,34 @@ const ScorePanel = ({ ad, teamId }) => {
               : "From the thumbnail only, so the pacing axes are weaker than they look"}
             {" · "}
             {score.model}
-            {" · "}
-            {score.rubricVersion}
             {score.problems ? ` · ${score.problems.join("; ")}` : ""}
           </p>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(true)}>
-            {busy ? "Scoring..." : "Score again"}
-          </Button>
         </>
+      ) : blocked ? (
+        <p className="note score-error">{blocked.message}</p>
+      ) : queued ? (
+        <p className="note">
+          Queued. Every ad is scored as it is saved; this one is waiting its turn
+          ({status.pending} ahead).
+        </p>
+      ) : score && score.failed ? (
+        <p className="note score-error">{score.error}</p>
       ) : (
-        <>
-          <p className="note">
-            Scores four axes out of ten from the frames captured when this ad was
-            saved: hook, utility, succinctness and production. Those frames and
-            this ad's copy are sent to the proxy, which forwards them to
-            Anthropic. It costs a call to the model, so the result is cached and
-            shared with your team.
-          </p>
-          <Button size="sm" disabled={busy} onClick={() => run(false)}>
-            {busy ? "Scoring..." : "Score this ad"}
-          </Button>
-        </>
+        <p className="note">Not scored yet.</p>
       )}
-      {error ? <p className="note score-error">{error}</p> : null}
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => send({ type: "SCORE_REQUEST", adIds: [ad.id], force: true })}
+      >
+        {score ? "Score again" : "Score now"}
+      </Button>
     </div>
   );
 };
 
-const AdDetail = ({ ad, onClose, teamId }) => {
+const AdDetail = ({ ad, onClose }) => {
   const rows = [
     ["Advertiser", ad.pageName],
     ["Library ID", ad.id],
@@ -451,7 +483,7 @@ const AdDetail = ({ ad, onClose, teamId }) => {
           )
         )}
       </div>
-      <ScorePanel ad={ad} teamId={teamId} />
+      <ScorePanel ad={ad} />
       <table className="detail-table">
         <tbody>
           {rows.map(([k, v]) => (
@@ -575,10 +607,31 @@ const TeamModal = ({ space, state, onClose, onDone, onImport, setActiveList }) =
       ) : (
         <>
           <div className="modal-actions">
+            {/* Always available. Converting the active space was the only way
+                to make a team before, which meant that once this space was
+                linked there was no way to make a second one at all. */}
+            <Button
+              variant="primary"
+              disabled={!!busy}
+              onClick={() =>
+                run("new", async () => {
+                  const name = prompt("Name the team space:", "Team swipe file");
+                  if (!name) return { ok: false, error: "Cancelled." };
+                  const res = await createTeamSpace(name);
+                  return res.ok
+                    ? {
+                        ok: true,
+                        message: `Team space "${name}" created. Share code ${res.team.join_code}.`,
+                      }
+                    : res;
+                })
+              }
+            >
+              {busy === "new" ? "Creating..." : "New team space"}
+            </Button>
             {!linked && (
               <>
                 <Button
-                  variant="primary"
                   disabled={!!busy}
                   onClick={() =>
                     run("create", async () => {
@@ -589,7 +642,7 @@ const TeamModal = ({ space, state, onClose, onDone, onImport, setActiveList }) =
                     })
                   }
                 >
-                  {busy === "create" ? "Creating..." : "Make this a team space"}
+                  {busy === "create" ? "Converting..." : "Share this space instead"}
                 </Button>
               </>
             )}
@@ -629,7 +682,7 @@ const TeamModal = ({ space, state, onClose, onDone, onImport, setActiveList }) =
             )}
           </div>
 
-          {!linked && (
+          {(
             <>
               <div className="form-row">
                 <label className="field-label" htmlFor="join-code">Join code</label>
@@ -646,10 +699,22 @@ const TeamModal = ({ space, state, onClose, onDone, onImport, setActiveList }) =
                   disabled={!!busy || code.length < 6}
                   onClick={() =>
                     run("join", async () => {
-                      const res = await joinTeam(space.id, code);
+                      // Joining in place is right for a personal space that has
+                      // not been shared. Doing it to a space that already
+                      // belongs to a team would re-point it and strand
+                      // everything synced to the first one, so that gets a new
+                      // space instead.
+                      const res = linked
+                        ? await joinTeamSpace(code)
+                        : await joinTeam(space.id, code);
                       if (!res.ok) return res;
                       setActiveList("__all__");
-                      const pulled = await pull({ ...space, teamId: res.team.id }, lists, state.ads);
+                      const target = res.space || space;
+                      const pulled = await pull(
+                        { ...target, teamId: res.team.id },
+                        lists,
+                        state.ads,
+                      );
                       return {
                         ok: true,
                         message: pulled.ok
@@ -1224,6 +1289,7 @@ const App = () => {
     settings: {},
     identity: {},
   });
+  const [scores, setScores] = useState({});
   const [ui, setUi] = useState({
     page: "library",
     activeList: "__all__",
@@ -1243,7 +1309,11 @@ const App = () => {
   });
 
   const refresh = useCallback(async () => {
-    const res = await send({ type: "GET_STATE" });
+    const [res, got] = await Promise.all([
+      send({ type: "GET_STATE" }),
+      send({ type: "SCORES_GET", adIds: [] }),
+    ]);
+    if (got && got.ok) setScores(got.scores || {});
     if (!res.ok) return;
     setState({
       spaces: res.spaces || {},
@@ -1262,6 +1332,23 @@ const App = () => {
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, [refresh]);
+
+  /**
+   * Restart scoring from here.
+   *
+   * The worker cannot refresh an expired Supabase session - rotating refresh
+   * tokens mean a worker that tried would invalidate the one the pages hold -
+   * so it stops the queue instead. This page has just loaded supabase-js, which
+   * refreshes and persists, so opening the dashboard is exactly the moment a
+   * stopped queue can start again. It also picks up ads saved before scoring
+   * existed.
+   */
+  useEffect(() => {
+    const ids = Object.keys(state.ads).filter((id) => !scores[id]);
+    if (!ids.length) return;
+    const timer = setTimeout(() => send({ type: "SCORE_REQUEST", adIds: ids }), 1500);
+    return () => clearTimeout(timer);
+  }, [state.ads, scores]);
 
   // An active list that no longer exists, or a selection whose ads were
   // deleted, would otherwise linger after a refresh.
@@ -1727,6 +1814,7 @@ const App = () => {
               onToggle={toggle}
               onOpen={(a) => setModal({ kind: "ad", ad: a })}
               activeList={ui.activeList}
+              score={scores[ad.id]}
             />
           ))}
         </section>
@@ -1752,11 +1840,7 @@ const App = () => {
       </main>
 
       {modal && modal.kind === "ad" && (
-        <AdDetail
-          ad={modal.ad}
-          teamId={(space && space.teamId) || null}
-          onClose={() => setModal(null)}
-        />
+        <AdDetail ad={modal.ad} onClose={() => setModal(null)} />
       )}
       {modal && modal.kind === "list" && (
         <ListSettings
