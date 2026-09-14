@@ -226,60 +226,8 @@
 }
 
 /* ---------------------------------------------------------------------
-   Launcher + side panel
+   Side panel (opened from the toolbar button, no floating launcher)
    --------------------------------------------------------------------- */
-
-.mal-launcher {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 2147483646;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  background: #fff;
-  border: none;
-  border-radius: 999px;
-  padding: 10px 14px;
-  cursor: pointer;
-  font:
-    600 13px/1 system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
-  color: #16181d;
-  box-shadow:
-    0 6px 20px rgba(0, 0, 0, 0.18),
-    0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.mal-launcher:hover {
-  background: #f7f7f5;
-}
-
-.mal-launcher.mal-hidden {
-  display: none;
-}
-
-.mal-launcher-mark {
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-bottom: 11px solid #2a78d6;
-}
-
-.mal-launcher-count {
-  background: #eaf2fd;
-  color: #2a78d6;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-weight: 700;
-  font-size: 12px;
-}
 
 .mal-panel {
   position: fixed;
@@ -290,7 +238,15 @@
   max-width: calc(100vw - 28px);
   z-index: 2147483646;
   display: flex;
-  background: #fff;
+  /* The dot grid runs across the entire panel; every surface above it is
+     translucent so the texture stays continuous behind the chrome. */
+  background-color: #fff;
+  background-image: radial-gradient(
+    rgba(17, 17, 17, 0.09) 1px,
+    transparent 1px
+  );
+  background-size: 14px 14px;
+  background-position: -1px -1px;
   border-radius: 16px;
   overflow: hidden;
   box-shadow:
@@ -320,17 +276,12 @@
 
 .mal-rail {
   flex: 0 0 68px;
-  background: #f7f7f5;
-  border-right: 1px solid #e3e3df;
+  background: rgba(247, 247, 245, 0.5);
+  border-right: 1px solid rgba(227, 227, 223, 0.9);
   padding: 12px 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background-image: radial-gradient(
-    rgba(17, 17, 17, 0.06) 1px,
-    transparent 1px
-  );
-  background-size: 12px 12px;
 }
 
 .mal-rail-btn {
@@ -338,13 +289,19 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  background: none;
-  border: none;
+  /* Slight frost so each tab lifts off the dot grid without hiding it. */
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 10px;
   padding: 9px 2px;
   cursor: pointer;
   color: #5c5f66;
   font: 600 10px/1 inherit;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .mal-rail-btn svg {
@@ -352,11 +309,12 @@
 }
 
 .mal-rail-btn:hover {
-  background: #ececea;
+  background: rgba(236, 236, 234, 0.8);
 }
 
 .mal-rail-btn.mal-active {
-  background: #eaf2fd;
+  background: rgba(234, 242, 253, 0.82);
+  border-color: rgba(207, 224, 247, 0.9);
   color: #2a78d6;
 }
 
@@ -374,7 +332,10 @@
   align-items: center;
   gap: 10px;
   padding: 14px 14px 10px;
-  border-bottom: 1px solid #e3e3df;
+  border-bottom: 1px solid rgba(227, 227, 223, 0.9);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .mal-head-title {
@@ -413,7 +374,10 @@
 
 .mal-foot {
   padding: 10px 14px 14px;
-  border-top: 1px solid #e3e3df;
+  border-top: 1px solid rgba(227, 227, 223, 0.9);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .mal-full {
@@ -423,8 +387,10 @@
 /* Panel content pieces */
 
 .mal-card {
-  background: #f7f7f5;
-  border: 1px solid #e3e3df;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(227, 227, 223, 0.9);
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 12px;
@@ -449,8 +415,10 @@
 }
 
 .mal-stat {
-  background: #fff;
-  border: 1px solid #e3e3df;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(227, 227, 223, 0.9);
   border-radius: 10px;
   padding: 9px 10px;
 }

@@ -6,7 +6,7 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 
 - **Native save controls.** A Save split-button and Download button are inserted into each ad card as their own full-width row, styled to match Facebook's controls, rather than floating over the creative.
 - **Save straight into a list.** The caret beside Save opens a menu of your spaces and colour-coded lists, so an ad goes where it belongs in one click.
-- **Side panel.** A slide-out workspace on the Ad Library itself, with Home, Saved, Lists and Account views: capture status and save-all, live counts, recently saved ads, and one-click pinning of the list new saves default to. The full dashboard is a link in its footer rather than the only place anything happens.
+- **Side panel, opened from the toolbar button.** Clicking the extension icon slides out a workspace on the Ad Library itself, with Home, Saved, Lists and Account views: capture status and save-all, live counts, recently saved ads, and one-click pinning of the list new saves default to. There is no floating on-page button, and no popup: off the Ad Library the toolbar button opens the dashboard instead. The full dashboard is a footer link rather than the only place anything happens.
 - **Spaces.** Keep separate libraries (per client, per project). Every space has its own lists, metrics, and exports.
 - **Team spaces.** Create a team space to get a join code, export it as a space file, and teammates merge it into the same space. Everyone's lists combine and saves are attributed by name.
 - **Colour-coded lists.** Eight label colours, editable per list; the colour shows in the sidebar, on each ad card, and in the save menu.
@@ -82,10 +82,13 @@ content/content.js       ISOLATED world: card action row, save menu, side panel
 background.js            service worker: spaces/lists/ads, downloads, team bundles, sync
 dashboard/metrics.js     aggregation (pure, unit-tested)
 dashboard/               spaces, colour-coded lists, metrics, team and sync UI
-popup/                   toolbar popup for the active space
 tests/                   node tests for the metrics module
 ```
 
 Storage shape: `spaces` hold `lists`, lists hold ad ids, and `ads` are stored once and referenced, so the same ad in two lists is one record.
 
-One layout note worth keeping: the action row is anchored to the **card**, never to one of Facebook's buttons. The last `role="button"` in a card is "See summary details" on some cards and the "Shop now" CTA on others, so anchoring to it put the row above the creative on some cards and squeezed it into the CTA's narrow row on others. `findCardRoot` instead climbs from the Library ID text until the subtree mentions a second ad (meaning it has stepped out into the results grid) and keeps the outermost element still describing exactly one ad. The row is appended there, so it is always the card's last row: full width, below the creative and any CTA, flush with the card's bottom edge.
+The panel carries one continuous dot grid across its whole surface; the rail, header, footer and content blocks are translucent with a slight backdrop blur so the texture stays unbroken behind them.
+
+Two layout notes worth keeping. First: the action row is anchored to the **card**, never to one of Facebook's buttons. The last `role="button"` in a card is "See summary details" on some cards and the "Shop now" CTA on others, so anchoring to it put the row above the creative on some cards and squeezed it into the CTA's narrow row on others. `findCardRoot` instead climbs from the Library ID text until the subtree mentions a second ad (meaning it has stepped out into the results grid) and keeps the outermost element still describing exactly one ad. The row is appended there, so it is always the card's last row: full width, below the creative and any CTA, flush with the card's bottom edge.
+
+Second: that walk must never return null. An earlier version rejected any card whose root was a horizontal flex row, which on the live site matched real cards and silently dropped the controls from every one of them. It now prefers a column/block root, falls back to a horizontal one (forcing `flex-wrap` so the row still lands on its own line), and finally falls back to the nearest ancestor holding the creative. A row in a slightly awkward place beats no row at all.

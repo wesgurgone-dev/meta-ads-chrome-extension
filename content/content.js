@@ -24,7 +24,6 @@
   let store = { ads: {}, lists: {}, spaces: {}, settings: {}, identity: {} };
   let openMenu = null;
   let panelEl = null;
-  let launcherEl = null;
   let view = "home";
 
   // ---------------------------------------------------------------------
@@ -295,23 +294,52 @@
    * role=button in a card is "See summary details" on some cards and the
    * "Shop now" CTA on others, so the row landed above the creative on some
    * and squeezed into the CTA's narrow row on others. Instead, climb from the
-   * Library ID text until the subtree starts mentioning a second ad - that
-   * means we have stepped out of this card and into the results grid - and
-   * keep the outermost element that still describes exactly this one ad.
-   * Horizontal rows are skipped so the row is never appended into a flex row
-   * that would squeeze it.
+   * Library ID text until the subtree mentions a second ad - meaning we have
+   * stepped out of this card and into the results grid - and keep the
+   * outermost element that still describes exactly this one ad.
+   *
+   * A column/block container is preferred, but a horizontal one is accepted
+   * as a fallback rather than returning nothing: a row in a slightly awkward
+   * place beats no row at all, and appendBar forces it onto its own line.
    */
   const findCardRoot = (node) => {
     let cur = node;
     let best = null;
+    let anyShape = null;
     for (let i = 0; i < 25 && cur && cur !== document.body; i++) {
       const n = countCapturedIds(cur);
       if (n > 1) break;
-      if (n === 1 && cur.querySelector("img, video") && !isHorizontalFlex(cur))
-        best = cur;
+      if (n === 1 && cur.querySelector("img, video")) {
+        anyShape = cur;
+        if (!isHorizontalFlex(cur)) best = cur;
+      }
       cur = cur.parentElement;
     }
-    return best;
+    if (best || anyShape) return best || anyShape;
+    // Last resort: the nearest ancestor holding the creative. Never return
+    // null, or the card silently gets no controls at all.
+    let cheap = node;
+    for (let i = 0; i < 14 && cheap && cheap !== document.body; i++) {
+      if (cheap.querySelector && cheap.querySelector("img, video"))
+        return cheap;
+      cheap = cheap.parentElement;
+    }
+    return null;
+  };
+
+  /**
+   * Put the row at the end of the card as its own full-width line. If the card
+   * turned out to be a horizontal flex row, allow wrapping so the row drops
+   * below Facebook's own children instead of being squeezed beside them.
+   */
+  const appendBar = (card, bar) => {
+    if (
+      isHorizontalFlex(card) &&
+      getComputedStyle(card).flexWrap === "nowrap"
+    ) {
+      card.style.flexWrap = "wrap";
+    }
+    card.appendChild(bar);
   };
 
   const buildBar = (ad) => {
@@ -392,7 +420,7 @@
       const card = findCardRoot(node.parentElement);
       if (!card || card.querySelector(".mal-bar")) continue;
       // One dedicated spot: the last row of the card, always.
-      card.appendChild(buildBar(captured.get(id)));
+      appendBar(card, buildBar(captured.get(id)));
     }
   };
 
@@ -415,13 +443,6 @@
   };
 
   const buildPanel = () => {
-    launcherEl = el("button", "mal-launcher");
-    launcherEl.type = "button";
-    launcherEl.innerHTML =
-      '<span class="mal-launcher-mark"></span><span class="mal-launcher-text">Ads Saver</span><span class="mal-launcher-count">0</span>';
-    launcherEl.addEventListener("click", openPanel);
-    document.documentElement.appendChild(launcherEl);
-
     panelEl = el("div", "mal-panel mal-closed");
     panelEl.id = "mal-panel";
     panelEl.innerHTML = `
@@ -464,7 +485,6 @@
   const openPanel = () => {
     if (!panelEl) buildPanel();
     panelEl.classList.remove("mal-closed");
-    launcherEl.classList.add("mal-hidden");
     try {
       localStorage.setItem("mal.panelOpen", "1");
     } catch (err) {
@@ -475,7 +495,6 @@
 
   const closePanel = () => {
     panelEl.classList.add("mal-closed");
-    launcherEl.classList.remove("mal-hidden");
     try {
       localStorage.setItem("mal.panelOpen", "0");
     } catch (err) {
@@ -713,10 +732,6 @@
 
   const renderPanel = () => {
     if (!panelEl) return;
-    if (launcherEl)
-      launcherEl.querySelector(".mal-launcher-count").textContent = String(
-        captured.size,
-      );
     if (panelEl.classList.contains("mal-closed")) return;
 
     const space = activeSpace();
@@ -757,6 +772,16 @@
 
   if (document.body) boot();
   else document.addEventListener("DOMContentLoaded", boot, { once: true });
+
+  // The toolbar button toggles the panel; there is no floating launcher.
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (!msg || msg.type !== "TOGGLE_PANEL") return false;
+    if (!panelEl) buildPanel();
+    if (panelEl.classList.contains("mal-closed")) openPanel();
+    else closePanel();
+    sendResponse({ ok: true });
+    return false;
+  });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
