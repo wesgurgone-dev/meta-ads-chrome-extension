@@ -380,6 +380,49 @@
    * in the captured set. Less rich than the GraphQL record (no CTA type, no
    * HD video URL) but enough to save the ad and download what is on screen.
    */
+  // Lines that are chrome, not an advertiser name.
+  const JUNK_NAME =
+    /^(sponsored|active|inactive|\d+\s*ads?\b.*|library id.*|see .*|platforms?|started running.*|this ad has.*)$/i;
+
+  /**
+   * The advertiser on a card. Facebook prints the name directly above a
+   * "Sponsored" label, which is far more reliable than "first bold element":
+   * that picks up "3 ads use this creative and text" on collated cards.
+   */
+  const guessAdvertiser = (card) => {
+    const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) =>
+        /^\s*sponsored\s*$/i.test(n.nodeValue || "")
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT,
+    });
+    const sponsored = walker.nextNode();
+    if (sponsored) {
+      let cur = sponsored.parentElement;
+      for (let i = 0; i < 4 && cur && cur !== card; i++) {
+        let sib = cur.previousElementSibling;
+        while (sib) {
+          const t = (sib.textContent || "").trim().split("\n")[0].trim();
+          if (t && t.length <= 60 && !JUNK_NAME.test(t)) return t;
+          sib = sib.previousElementSibling;
+        }
+        cur = cur.parentElement;
+      }
+    }
+    for (const n of card.querySelectorAll(
+      "strong, b, h3, h4, a[role='link']",
+    )) {
+      const t = (n.textContent || "").trim();
+      if (t && t.length <= 60 && !JUNK_NAME.test(t)) return t;
+    }
+    return "Unknown page";
+  };
+
+  /**
+   * An ad assembled from the card's own DOM, for when the printed id was not
+   * in the captured set. Less rich than the GraphQL record (no CTA type, no
+   * HD video URL) but enough to save the ad and download what is on screen.
+   */
   const adFromCard = (id, card) => {
     const media = [];
     for (const img of card.querySelectorAll("img")) {
@@ -401,12 +444,10 @@
       else if (vid.poster)
         media.push({ type: "image", url: vid.poster, previewUrl: vid.poster });
     }
-    // The advertiser name is the first strong/bold line in the card.
-    const nameEl = card.querySelector("strong, b, h3, h4");
     const head = (card.textContent || "").slice(0, 300);
     return {
       id,
-      pageName: (nameEl && nameEl.textContent.trim()) || "Unknown page",
+      pageName: guessAdvertiser(card),
       isActive: /\bactive\b/i.test(head) ? true : null,
       media,
       capturedAt: Date.now(),
@@ -415,6 +456,7 @@
     };
   };
 
+  /** The card's action row: Save (with its destination caret) and Download. */
   const buildBar = (ad) => {
     const bar = el("div", "mal-bar");
     bar.dataset.malAdId = ad.id;
@@ -575,33 +617,115 @@
     return t;
   };
 
-  const adRow = (ad) => {
-    const row = el("div", "mal-ad");
-    const thumb = el("div", "mal-ad-thumb");
-    if (ad.thumbDataUrl) {
-      const img = el("img");
-      img.src = ad.thumbDataUrl;
-      img.alt = "";
-      thumb.appendChild(img);
-    } else {
-      thumb.textContent = (ad.pageName || "?").slice(0, 1).toUpperCase();
-    }
-    const meta = el("div", "mal-ad-meta");
-    meta.append(el("div", "mal-ad-name", ad.pageName || "Unknown page"));
-    const days = daysRunning(ad);
-    const bits = [];
-    if (days != null) bits.push(`${days}d running`);
-    if (ad.isActive === true) bits.push("active");
-    else if (ad.isActive === false) bits.push("ended");
-    meta.append(el("div", "mal-ad-sub", bits.join(" · ")));
-    row.append(thumb, meta);
+  /** Creative format, mirroring the dashboard's rule. */
+  const formatOf = (ad) => {
+    const kinds = (ad.media || []).length
+      ? ad.media.map((m) => m.type)
+      : ad.mediaKinds || [];
+    if (kinds.filter((k) => k !== "video").length > 1) return "carousel";
+    if (kinds.some((k) => k === "video")) return "video";
+    if (kinds.length) return "image";
+    return "text";
+  };
 
-    const open = el("a", "mal-ad-open", "View");
-    open.href = ad.libraryUrl || "#";
-    open.target = "_blank";
-    open.rel = "noreferrer";
-    row.appendChild(open);
-    return row;
+  const thumbOf = (ad) => {
+    if (ad.thumbDataUrl) return ad.thumbDataUrl;
+    const m = (ad.media || []).find((x) => x.previewUrl) || (ad.media || [])[0];
+    return (m && (m.previewUrl || (m.type === "image" ? m.url : null))) || null;
+  };
+
+  /** Lists in the active space that hold this ad, for its colour chips. */
+  const listsForAd = (id) =>
+    Object.values(store.lists || {}).filter(
+      (l) =>
+        l.spaceId === (store.settings || {}).activeSpaceId &&
+        (l.adIds || []).includes(id),
+    );
+
+  /**
+   * A compact version of the dashboard's ad card: creative, status and format
+   * badges, advertiser, longevity, list colour, and the two actions.
+   */
+  const miniCard = (ad) => {
+    const card = el("div", "mal-mini");
+
+    const media = el("div", "mal-mini-media");
+    const thumb = thumbOf(ad);
+    if (thumb) {
+      const img = el("img");
+      img.src = thumb;
+      img.alt = "";
+      img.loading = "lazy";
+      media.appendChild(img);
+    } else {
+      media.appendChild(
+        el(
+          "div",
+          "mal-mini-ph",
+          (ad.pageName || "?").slice(0, 1).toUpperCase(),
+        ),
+      );
+    }
+    if (ad.isActive === true)
+      media.appendChild(el("span", "mal-mini-badge mal-mini-live", "ACTIVE"));
+    else if (ad.isActive === false)
+      media.appendChild(el("span", "mal-mini-badge mal-mini-ended", "ENDED"));
+    media.appendChild(
+      el("span", "mal-mini-badge mal-mini-fmt", formatOf(ad).toUpperCase()),
+    );
+    media.addEventListener("click", () => window.open(ad.libraryUrl, "_blank"));
+    card.appendChild(media);
+
+    const body = el("div", "mal-mini-body");
+    const name = el("div", "mal-mini-name", ad.pageName || "Unknown page");
+    name.title = "Open in the Ad Library";
+    name.addEventListener("click", () => window.open(ad.libraryUrl, "_blank"));
+    body.appendChild(name);
+
+    const days = daysRunning(ad);
+    body.appendChild(
+      el(
+        "div",
+        "mal-mini-sub",
+        [
+          days != null ? `${days}d running` : null,
+          ad.savedBy ? `by ${ad.savedBy}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || "\u2014",
+      ),
+    );
+
+    const lists = listsForAd(ad.id);
+    if (lists.length) {
+      const chips = el("div", "mal-mini-chips");
+      for (const l of lists.slice(0, 2)) {
+        const chip = el("span", "mal-mini-chip");
+        const dot = el("span", "mal-dot");
+        dot.style.background = l.color;
+        chip.append(dot, el("span", null, l.name));
+        chips.appendChild(chip);
+      }
+      body.appendChild(chips);
+    }
+
+    // At mini width two labelled buttons do not fit, so Download is the one
+    // full-width action and the creative itself opens the ad.
+    const actions = el("div", "mal-mini-actions");
+    const dl = el("button", "mal-btn mal-btn-primary mal-mini-btn", "Download");
+    dl.type = "button";
+    dl.addEventListener("click", () => downloadAd(ad));
+    actions.appendChild(dl);
+    body.appendChild(actions);
+
+    card.appendChild(body);
+    return card;
+  };
+
+  const miniGrid = (ads) => {
+    const grid = el("div", "mal-mini-grid");
+    for (const ad of ads) grid.appendChild(miniCard(ad));
+    return grid;
   };
 
   const renderHome = (body) => {
@@ -660,7 +784,7 @@
         el("div", "mal-empty", "Nothing saved in this space yet."),
       );
     } else {
-      for (const ad of saved.slice(0, 4)) body.appendChild(adRow(ad));
+      body.appendChild(miniGrid(saved.slice(0, 4)));
     }
   };
 
@@ -675,7 +799,7 @@
       );
       return;
     }
-    for (const ad of saved.slice(0, 50)) body.appendChild(adRow(ad));
+    body.appendChild(miniGrid(saved.slice(0, 50)));
     if (saved.length > 50)
       body.appendChild(
         el(
@@ -839,6 +963,13 @@
   const boot = async () => {
     buildPanel();
     observer.observe(document.body, { childList: true, subtree: true });
+    // Decorate straight away, then sweep a few times. Results are usually
+    // already rendered before this script runs, and the interceptor's message
+    // can land before this listener exists, so waiting on either of those for
+    // the first pass leaves every card without controls.
+    decorateCards();
+    for (const delay of [400, 1200, 2500, 5000])
+      setTimeout(decorateCards, delay);
     await refreshTargets();
     await refreshStore();
     let wasOpen = "0";
