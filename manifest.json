@@ -3,7 +3,13 @@
   "name": "Meta Ads Library Saver",
   "version": "0.1.0",
   "description": "Capture ads from the Meta Ad Library, save them into your own lists, download creatives, and see every stat Meta exposes (spend, reach, longevity).",
-  "permissions": ["storage", "unlimitedStorage", "downloads"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "downloads",
+    "scripting",
+    "activeTab"
+  ],
   "host_permissions": [
     "https://www.facebook.com/*",
     "https://web.facebook.com/*",

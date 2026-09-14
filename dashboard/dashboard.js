@@ -1063,6 +1063,11 @@
 
   $("#btn-team").addEventListener("click", openTeamModal);
   $("#btn-settings").addEventListener("click", openSettingsModal);
+  // Routed through the background so an Ad Library tab that is already open is
+  // focused rather than duplicated.
+  $("#btn-library").addEventListener("click", () =>
+    send({ type: "OPEN_LIBRARY" }),
+  );
 
   $("#import-file").addEventListener("change", async (e) => {
     const file = e.target.files && e.target.files[0];

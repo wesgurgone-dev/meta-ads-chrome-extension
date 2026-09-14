@@ -1,15 +1,30 @@
 /**
- * Isolated-world content script for facebook.com/ads/library.
+ * Isolated-world content script.
  *
  * Two jobs:
  *   1. Decorate each ad card with a Save split-button and a Download button,
  *      styled like Facebook's own controls and laid out as their own row.
+ *      Only on the Ad Library; there are no cards anywhere else.
  *   2. Run the side panel: a slide-out workspace showing what has been
  *      captured, what is saved, and the colour-coded lists, so the common
  *      work happens here instead of bouncing to the dashboard.
+ *
+ * Declared for facebook.com/ads/library in the manifest, and injected on
+ * demand by the toolbar button on any other page, so the panel is reachable
+ * from wherever you are rather than only from the Library.
  */
 (() => {
   "use strict";
+
+  // Injected on demand as well as declared, so this file can be evaluated
+  // twice in the same isolated world. The second run must do nothing.
+  if (window.__malContentLoaded) return;
+  window.__malContentLoaded = true;
+
+  // Re-read rather than snapshot: Facebook is a single-page app, so a tab can
+  // reach the Library without this script ever being evaluated again.
+  const onLibrary = () => /facebook\.com\/ads\/library/.test(location.href);
+  let libraryMode = false;
 
   const MSG_TYPE = "MAL_ADS_CAPTURED";
   const captured = new Map(); // adId -> ad from the GraphQL interceptor
@@ -596,6 +611,10 @@
   let decoratedCount = 0;
 
   const decorateCards = () => {
+    // The one gate every entry point passes through: boot, the observer, and
+    // the interceptor message. Off the Library a 12-to-20 digit run in the
+    // page text is just a number, not an ad id.
+    if (!onLibrary()) return;
     const all = idOccurrences();
     if (all.length === 0) return;
 
@@ -666,6 +685,7 @@
   };
 
   const buildPanel = () => {
+    if (panelEl) return;
     panelEl = el("div", "mal-panel mal-closed");
     panelEl.id = "mal-panel";
     panelEl.innerHTML = `
@@ -690,6 +710,9 @@
         </header>
         <div class="mal-view" id="mal-view"></div>
         <footer class="mal-foot">
+          <button type="button" class="mal-btn mal-btn-primary mal-full" id="mal-open-library" hidden>
+            Go to Ad Library
+          </button>
           <button type="button" class="mal-btn mal-btn-secondary mal-full" id="mal-open-dash">
             Open full dashboard
           </button>
@@ -701,6 +724,9 @@
     panelEl
       .querySelector("#mal-open-dash")
       .addEventListener("click", () => send({ type: "OPEN_DASHBOARD" }));
+    panelEl
+      .querySelector("#mal-open-library")
+      .addEventListener("click", () => send({ type: "OPEN_LIBRARY" }));
     panelEl.querySelectorAll(".mal-rail-btn").forEach((btn) => {
       btn.addEventListener("click", () => setView(btn.dataset.view));
     });
@@ -858,6 +884,31 @@
     const pageAds = [...onPage.values()];
     const newCount = pageAds.filter((a) => !savedIds.has(a.id)).length;
 
+    if (!onLibrary()) {
+      // Off the Library there is nothing to capture here, so say that plainly
+      // rather than showing a disabled "Save all on page" and a zero count.
+      const away = el("div", "mal-card");
+      away.append(
+        el("div", "mal-card-title", "Not on the Ad Library"),
+        el(
+          "div",
+          "mal-card-sub",
+          "Your library is below. Head to the Ad Library to capture new ads.",
+        ),
+      );
+      const go = el(
+        "button",
+        "mal-btn mal-btn-primary mal-full",
+        "Go to Ad Library",
+      );
+      go.type = "button";
+      go.addEventListener("click", () => send({ type: "OPEN_LIBRARY" }));
+      away.appendChild(go);
+      body.appendChild(away);
+      renderHomeStats(body);
+      return;
+    }
+
     const capture = el("div", "mal-card");
     capture.append(
       el(
@@ -892,6 +943,11 @@
     capture.appendChild(saveAll);
     body.appendChild(capture);
 
+    renderHomeStats(body);
+  };
+
+  // The library summary, shown on Home whether or not this page has ads on it.
+  const renderHomeStats = (body) => {
     const saved = savedInSpace();
     const week = saved.filter(
       (a) => (a.savedAt || 0) >= Date.now() - 7 * 86400000,
@@ -1080,6 +1136,12 @@
       b.classList.toggle("mal-active", b.dataset.view === view);
     });
 
+    // The button exists to get you to the Library, so it has no job once you
+    // are on it. Checked on every render because a SPA navigation can move the
+    // tab onto or off the Library without reloading this script.
+    ensureLibraryMode();
+    panelEl.querySelector("#mal-open-library").hidden = onLibrary();
+
     const body = panelEl.querySelector("#mal-view");
     body.innerHTML = "";
     if (view === "home") renderHome(body);
@@ -1092,8 +1154,13 @@
   // Boot
   // ---------------------------------------------------------------------
 
-  const boot = async () => {
-    buildPanel();
+  // Card decoration is Library-only work: starting a subtree observer on every
+  // page the panel is opened on would cost every visitor of every site nothing
+  // but battery. Idempotent, so a SPA navigation onto the Library can start it
+  // late without restarting anything.
+  const ensureLibraryMode = () => {
+    if (libraryMode || !onLibrary() || !document.body) return;
+    libraryMode = true;
     observer.observe(document.body, { childList: true, subtree: true });
     // Decorate straight away, then sweep a few times. Results are usually
     // already rendered before this script runs, and the interceptor's message
@@ -1102,6 +1169,11 @@
     decorateCards();
     for (const delay of [400, 1200, 2500, 5000])
       setTimeout(decorateCards, delay);
+  };
+
+  const boot = async () => {
+    buildPanel();
+    ensureLibraryMode();
     await refreshTargets();
     await refreshStore();
     let wasOpen = "0";
@@ -1120,8 +1192,11 @@
   // The toolbar button toggles the panel; there is no floating launcher.
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || msg.type !== "TOGGLE_PANEL") return false;
-    if (!panelEl) buildPanel();
-    if (panelEl.classList.contains("mal-closed")) openPanel();
+    buildPanel();
+    // msg.open is set when the background just injected this script: the click
+    // that caused the injection was a request to open, never to close.
+    if (msg.open) openPanel();
+    else if (panelEl.classList.contains("mal-closed")) openPanel();
     else closePanel();
     sendResponse({ ok: true });
     return false;

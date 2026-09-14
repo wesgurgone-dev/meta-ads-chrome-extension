@@ -398,6 +398,15 @@
   padding: 10px 14px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.4);
   background: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* .mal-btn is display:inline-flex, which outranks the user-agent [hidden]
+   rule, so hiding the Ad Library button needs saying explicitly. */
+.mal-btn[hidden] {
+  display: none;
 }
 
 .mal-full {
