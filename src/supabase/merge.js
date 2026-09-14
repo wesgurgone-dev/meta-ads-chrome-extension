@@ -195,3 +195,99 @@ export const nextCursor = (rows, previous) => {
   // And never let the overlap drag the mark behind where it already was.
   return Date.parse(moved) > Date.parse(previous) ? moved : previous;
 };
+
+/**
+ * Fold remote canvases into the local canvases map.
+ *
+ * Simpler than lists in one way that matters: canvas, node and edge ids are
+ * uuids generated on the client, so a local id is already the remote id and
+ * there is no mapping to carry back. `link_lists` exists only because lists
+ * were not built that way.
+ *
+ * Remote is the truth for a canvas that came back, nodes and edges included:
+ * unioning them would make moving or removing a node impossible to propagate,
+ * and the node text is the whole point of the feature. A canvas the pull did
+ * not mention is left exactly as it is.
+ */
+export const mergeCanvases = ({ localCanvases, spaceId, canvasRows, nodeRows, edgeRows }) => {
+  const canvases = { ...localCanvases };
+  const removed = [];
+
+  const nodesByCanvas = new Map();
+  for (const row of nodeRows || []) {
+    if (row.deleted_at) continue;
+    if (!nodesByCanvas.has(row.canvas_id)) nodesByCanvas.set(row.canvas_id, []);
+    nodesByCanvas.get(row.canvas_id).push({
+      id: row.id,
+      kind: row.kind,
+      adId: row.archive_id || null,
+      note: row.note || "",
+      snapshot: row.snapshot || {},
+      x: row.x,
+      y: row.y,
+    });
+  }
+
+  const edgesByCanvas = new Map();
+  for (const row of edgeRows || []) {
+    if (row.deleted_at) continue;
+    if (!edgesByCanvas.has(row.canvas_id)) edgesByCanvas.set(row.canvas_id, []);
+    edgesByCanvas.get(row.canvas_id).push({ from: row.from_node, to: row.to_node });
+  }
+
+  for (const row of canvasRows || []) {
+    if (row.deleted_at) {
+      if (canvases[row.id]) {
+        delete canvases[row.id];
+        removed.push(row.id);
+      }
+      continue;
+    }
+    const local = canvases[row.id];
+    canvases[row.id] = {
+      id: row.id,
+      spaceId,
+      name: row.name,
+      // A canvas whose rows have not arrived yet keeps whatever it had, rather
+      // than rendering as an empty graph somebody then edits over the top of.
+      nodes: nodesByCanvas.get(row.id) || (local ? local.nodes : []),
+      edges: edgesByCanvas.get(row.id) || (local ? local.edges : []),
+      createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
+      updatedAt: row.updated_at ? Date.parse(row.updated_at) : Date.now(),
+    };
+  }
+
+  return { canvases, removed };
+};
+
+/** The rows one local canvas becomes. */
+export const rowsFromCanvas = (canvas, teamId, userId) => ({
+  canvas: {
+    id: canvas.id,
+    team_id: teamId,
+    name: canvas.name,
+    created_by: userId,
+    deleted_at: null,
+  },
+  nodes: (canvas.nodes || []).map((node) => ({
+    id: node.id,
+    canvas_id: canvas.id,
+    kind: node.kind,
+    // The check constraint ties archive_id to kind: a reference must name an
+    // ad, and a note or output must not carry one.
+    archive_id: node.kind === "reference" ? node.adId || null : null,
+    note: node.note || "",
+    snapshot: node.snapshot || {},
+    x: Math.round(node.x || 0),
+    y: Math.round(node.y || 0),
+    created_by: userId,
+    deleted_at: null,
+  })),
+  edges: (canvas.edges || []).map((edge) => ({
+    canvas_id: canvas.id,
+    from_node: edge.from,
+    to_node: edge.to,
+    created_by: userId,
+    deleted_at: null,
+  })),
+});

@@ -1157,6 +1157,25 @@ const handleCanvasOp = async (msg) => {
   }
 };
 
+/**
+ * Write back merged canvases.
+ *
+ * The merge happens in the page, where supabase-js lives; the write lands here
+ * so every change to the store goes through one place. Canvases belonging to
+ * other spaces are carried over untouched, for the same reason handleApplySync
+ * does it: syncing one space must never wipe the rest.
+ */
+const handleApplyCanvasSync = async ({ canvases }) => {
+  const { canvases: local = {} } = await chrome.storage.local.get("canvases");
+  const next = { ...local };
+  const spaceIds = new Set(Object.values(canvases || {}).map((c) => c.spaceId));
+  for (const canvas of Object.values(local))
+    if (spaceIds.has(canvas.spaceId)) delete next[canvas.id];
+  for (const canvas of Object.values(canvases || {})) next[canvas.id] = canvas;
+  await chrome.storage.local.set({ canvases: next });
+  return { ok: true, canvases: Object.keys(canvases || {}).length };
+};
+
 /** Every ad a canvas points at, so library reaping cannot strip one bare. */
 const canvasReferencedAds = (canvases) => {
   const out = new Set();
@@ -1281,6 +1300,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return respond(handleScoreSave(msg.score));
     case "CANVAS_OP":
       return respond(handleCanvasOp(msg));
+    case "APPLY_CANVAS_SYNC":
+      return respond(handleApplyCanvasSync(msg));
     case "SYNC_SET":
       return respond(handleSyncSet(msg.enabled));
     case "SYNC_PUSH":

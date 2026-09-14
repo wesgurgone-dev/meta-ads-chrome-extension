@@ -12,7 +12,14 @@
  * realtime socket.
  */
 import { getClient, getSession } from "./client.js";
-import { mergeAds, mergeLists, nextCursor, rowFromAd } from "./merge.js";
+import {
+  mergeAds,
+  mergeCanvases,
+  mergeLists,
+  nextCursor,
+  rowFromAd,
+  rowsFromCanvas,
+} from "./merge.js";
 
 const CURSORS = "syncCursors";
 
@@ -84,6 +91,90 @@ export const joinTeam = async (spaceId, code) => {
   }
 };
 
+
+/**
+ * Canvases, nodes and edges.
+ *
+ * Ids are uuids generated on the client, so a local id is already the remote id
+ * and nothing has to be mapped back. What does need care is removal: deleting a
+ * node locally deletes the object, so there is no tombstone to push. The rows
+ * that are still here are upserted, and every other row on that canvas is
+ * marked deleted - which is also what stops a teammate's device helpfully
+ * re-inserting a node somebody removed.
+ */
+const pushCanvases = async (supabase, session, space) => {
+  const { canvases = {} } = await chrome.storage.local.get("canvases");
+  const mine = Object.values(canvases).filter((c) => c.spaceId === space.id);
+  if (!mine.length) return { count: 0 };
+
+  for (const canvas of mine) {
+    const rows = rowsFromCanvas(canvas, space.teamId, session.user.id);
+
+    const { error: canvasError } = await supabase
+      .from("canvases")
+      .upsert(rows.canvas, { onConflict: "id" });
+    if (canvasError) return { error: canvasError.message };
+
+    if (rows.nodes.length) {
+      const { error } = await supabase
+        .from("canvas_nodes")
+        .upsert(rows.nodes, { onConflict: "id" });
+      if (error) return { error: error.message };
+    }
+
+    // Anything on this canvas that is no longer here is gone on purpose.
+    const keep = rows.nodes.map((n) => n.id);
+    const staleNodes = supabase
+      .from("canvas_nodes")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("canvas_id", canvas.id)
+      .is("deleted_at", null);
+    const { error: reapError } = await (keep.length
+      ? staleNodes.not("id", "in", `(${keep.join(",")})`)
+      : staleNodes);
+    if (reapError) return { error: reapError.message };
+
+    if (rows.edges.length) {
+      const { error } = await supabase
+        .from("canvas_edges")
+        .upsert(rows.edges, { onConflict: "from_node,to_node" });
+      if (error) return { error: error.message };
+    }
+    const keptEdges = rows.edges.map((e) => e.from_node);
+    const staleEdges = supabase
+      .from("canvas_edges")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("canvas_id", canvas.id)
+      .is("deleted_at", null);
+    const { error: edgeReapError } = await (keptEdges.length
+      ? staleEdges.not("from_node", "in", `(${[...new Set(keptEdges)].join(",")})`)
+      : staleEdges);
+    if (edgeReapError) return { error: edgeReapError.message };
+  }
+
+  return { count: mine.length };
+};
+
+/** Fetch the canvases that moved, and their children. */
+const pullCanvases = async (supabase, space, since) => {
+  let query = supabase.from("canvases").select("*").eq("team_id", space.teamId);
+  if (since) query = query.gt("updated_at", since);
+  const { data, error } = await query;
+  if (error) return { error: error.message };
+  if (!data.length) return { rows: [], nodes: [], edges: [] };
+
+  const ids = data.map((c) => c.id);
+  // Nodes and edges are read per canvas that came back, not filtered by time:
+  // a node write touches its canvas, so the canvas is the cursor for all three.
+  const [nodes, edges] = await Promise.all([
+    supabase.from("canvas_nodes").select("*").in("canvas_id", ids),
+    supabase.from("canvas_edges").select("*").in("canvas_id", ids),
+  ]);
+  if (nodes.error) return { error: nodes.error.message };
+  if (edges.error) return { error: edges.error.message };
+  return { rows: data, nodes: nodes.data, edges: edges.data };
+};
+
 /**
  * Send everything in the space up.
  *
@@ -152,7 +243,16 @@ export const push = async (space, lists, ads) => {
     }
 
     await send({ type: "SPACE_OP", op: "link_lists", links: linked });
-    return { ok: true, ads: pushedAds, lists: linked.length };
+
+    const pushedCanvases = await pushCanvases(supabase, session, space);
+    if (pushedCanvases.error) return { ok: false, error: pushedCanvases.error };
+
+    return {
+      ok: true,
+      ads: pushedAds,
+      lists: linked.length,
+      canvases: pushedCanvases.count,
+    };
   } catch (err) {
     return { ok: false, error: String(err.message || err) };
   }
@@ -201,15 +301,31 @@ export const pull = async (space, localLists, localAds) => {
     });
 
     await send({ type: "APPLY_SYNC", spaceId: space.id, ads, lists });
+
+    const canvasRes = await pullCanvases(supabase, space, since);
+    if (canvasRes.error) return { ok: false, error: canvasRes.error };
+    if (canvasRes.rows.length) {
+      const { canvases = {} } = await chrome.storage.local.get("canvases");
+      const merged = mergeCanvases({
+        localCanvases: canvases,
+        spaceId: space.id,
+        canvasRows: canvasRes.rows,
+        nodeRows: canvasRes.nodes,
+        edgeRows: canvasRes.edges,
+      });
+      await send({ type: "APPLY_CANVAS_SYNC", canvases: merged.canvases });
+    }
+
     await writeCursor(
       space.teamId,
-      nextCursor([...adsRes.data, ...listsRes.data], since),
+      nextCursor([...adsRes.data, ...listsRes.data, ...canvasRes.rows], since),
     );
 
     return {
       ok: true,
       ads: adsRes.data.length,
       lists: listsRes.data.length,
+      canvases: canvasRes.rows.length,
       removed: removed.length,
     };
   } catch (err) {
@@ -239,6 +355,13 @@ export const watch = async (space, onChange) => {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "lists", filter: `team_id=eq.${space.teamId}` },
+      onChange,
+    )
+    // Canvases only. Node and edge changes touch their canvas, so one
+    // subscription covers all three.
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "canvases", filter: `team_id=eq.${space.teamId}` },
       onChange,
     )
     .subscribe();

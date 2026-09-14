@@ -92,7 +92,9 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
     const bad = (s) => /\beval\s*\(/.test(s) || /new\s+Function\s*\(/.test(s) || /sourceMappingURL=data:/.test(s);
     return { panelKB: Math.round(panel.length / 1024), dashKB: Math.round(dash.length / 1024),
              panelBad: bad(panel), dashBad: bad(dash), framesBad: bad(frames),
-             framesGuarded: /msg\.target !== "frames-offscreen"/.test(frames) };
+             framesGuarded: /msg\.target !== "frames-offscreen"/.test(frames),
+             // The two libraries this budget actually exists to keep out.
+             heavy: /xyflow|react-flow|@anthropic-ai\/sdk|anthropic-ai-sdk/.test(dash) };
   });
   ok(!bundles.panelBad && !bundles.dashBad, 'no eval, no new Function, no inline source map');
   // The offscreen document is hand-written and unbundled, so it is not covered
@@ -101,8 +103,15 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(bundles.framesGuarded, 'and only answers messages addressed to it');
   // The dashboard carries supabase-js (~220KB) and the panel does not, so they
   // get their own budgets rather than one number that hides the difference.
+  //
+  // The budget is here to catch a heavy dependency landing, not to cap feature
+  // code - React Flow alone would add 177KB and does not tree-shake, and the
+  // Anthropic SDK belongs to the Edge Function and must never reach a bundle.
+  // So the ceiling is generous and the two names are asserted directly, rather
+  // than a tight number that a legitimate feature trips first.
   ok(bundles.panelKB < 320, `panel bundle ${bundles.panelKB}KB`);
-  ok(bundles.dashKB < 560, `dashboard bundle ${bundles.dashKB}KB, supabase-js included`);
+  ok(bundles.dashKB < 620, `dashboard bundle ${bundles.dashKB}KB, supabase-js included`);
+  ok(!bundles.heavy, 'no graph library and no Anthropic SDK in the dashboard bundle');
 
   console.log('--- content script still decorates Ad Library cards ---');
   const lib = await ctx.newPage();

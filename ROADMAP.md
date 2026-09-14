@@ -55,13 +55,12 @@ tables since it was last applied. It is idempotent; re-run the whole file.
 
 ### Open, and small
 
-- **Canvas sync.** The tables, policies and the parent-touch trigger are in the
-  schema, but `push`/`pull` in `src/supabase/sync.js` do not carry canvases yet.
-  Canvases are local-only until they do.
-- **Bundle headroom.** The dashboard bundle is at 547KB against the 560KB
-  assertion in `tests/ui.test.cjs`. The next sizeable dependency needs either a
-  raised budget with a stated reason, or the ESM split that was measured and
-  parked.
+- **Canvas sync is written but unproven.** `push`/`pull` carry canvases, nodes
+  and edges, the merge rules are tested, and the realtime channel watches
+  `canvases` (a node write touches its canvas, so one subscription covers all
+  three). None of it has run against the live project, because sign-in has not
+  succeeded. The one piece worth a second look when it does is the stale-row
+  reap in `pushCanvases`, which builds a PostgREST `not.in` list of node uuids.
 - **Frames are opt-out-less.** Capture spends background bandwidth on every saved
   video ad. It should be visible and disableable in Settings.
 - **Scoring cost is unmeasured.** Use `messages.count_tokens` on representative
