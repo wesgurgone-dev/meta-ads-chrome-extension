@@ -13,6 +13,7 @@
 
   const MSG_TYPE = "MAL_ADS_CAPTURED";
   const captured = new Map(); // adId -> ad from the GraphQL interceptor
+  const mediaIndex = new Map(); // normalised creative URL -> captured ad
   const onPage = new Map(); // adId -> ad actually decorated on screen
   const savedIds = new Set();
 
@@ -67,7 +68,11 @@
     if (event.source !== window) return;
     const data = event.data;
     if (!data || data.type !== MSG_TYPE || !Array.isArray(data.ads)) return;
-    for (const ad of data.ads) if (ad && ad.id) captured.set(ad.id, ad);
+    for (const ad of data.ads) {
+      if (!ad || !ad.id) continue;
+      captured.set(ad.id, ad);
+      indexMedia(ad);
+    }
     decorateCards();
     renderPanel();
   });
@@ -155,11 +160,21 @@
       return;
     }
     const res = await send({ type: "DOWNLOAD_AD", ad });
-    toast(
-      res.ok
-        ? `Downloading ${res.count} file${res.count === 1 ? "" : "s"}`
-        : "Download failed",
-    );
+    if (!res.ok) {
+      toast(
+        res.reason === "unusable"
+          ? "This creative has no downloadable file"
+          : "Download failed",
+      );
+      return;
+    }
+    const label =
+      res.quality === "hd"
+        ? " in HD"
+        : res.quality === "low"
+          ? " (page quality, HD not captured)"
+          : "";
+    toast(`Downloading ${res.count} file${res.count === 1 ? "" : "s"}${label}`);
   };
 
   // ---------------------------------------------------------------------
@@ -380,6 +395,51 @@
    * in the captured set. Less rich than the GraphQL record (no CTA type, no
    * HD video URL) but enough to save the ad and download what is on screen.
    */
+  /**
+   * Facebook's CDN URLs carry signed, short-lived query parameters that differ
+   * between the copy embedded in the page and the copy in the GraphQL
+   * response, so the path alone is the stable identity of a creative.
+   */
+  const mediaKey = (url) => {
+    try {
+      const u = new URL(url);
+      return u.origin + u.pathname;
+    } catch (err) {
+      return url || "";
+    }
+  };
+
+  const indexMedia = (ad) => {
+    for (const m of ad.media || []) {
+      for (const u of [m.url, m.previewUrl, m.hdUrl, m.sdUrl]) {
+        if (u) mediaIndex.set(mediaKey(u), ad);
+      }
+    }
+  };
+
+  /**
+   * Find the captured record for a card by matching its creative, for when the
+   * printed id is not the archive id we captured. This is what recovers the
+   * full-resolution video: the page's own <video> plays a lower-bitrate
+   * variant (often a blob: MSE stream), while the GraphQL record carries
+   * video_hd_url and the original, unresized image.
+   */
+  const matchByMedia = (card) => {
+    for (const v of card.querySelectorAll("video")) {
+      if (v.poster) {
+        const hit = mediaIndex.get(mediaKey(v.poster));
+        if (hit) return hit;
+      }
+    }
+    for (const img of card.querySelectorAll("img")) {
+      if (img.src) {
+        const hit = mediaIndex.get(mediaKey(img.src));
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+
   // Lines that are chrome, not an advertiser name.
   const JUNK_NAME =
     /^(sponsored|active|inactive|\d+\s*ads?\b.*|library id.*|see .*|platforms?|started running.*|this ad has.*)$/i;
@@ -432,17 +492,25 @@
       media.push({ type: "image", url: img.src, previewUrl: img.src });
     }
     for (const vid of card.querySelectorAll("video")) {
-      const src = vid.currentSrc || vid.src;
-      if (src && /^https?:/.test(src))
+      // currentSrc is frequently a blob: MSE stream, which cannot be
+      // downloaded; <source> children and src are the usable candidates.
+      const candidates = [
+        vid.currentSrc,
+        vid.src,
+        ...[...vid.querySelectorAll("source")].map((n) => n.src),
+      ].filter((u) => u && /^https?:/.test(u));
+      if (candidates.length) {
         media.push({
           type: "video",
-          url: src,
+          url: candidates[0],
           hdUrl: null,
-          sdUrl: src,
+          sdUrl: candidates[0],
           previewUrl: vid.poster || null,
+          lowRes: true, // the page's playback copy, not the HD original
         });
-      else if (vid.poster)
+      } else if (vid.poster) {
         media.push({ type: "image", url: vid.poster, previewUrl: vid.poster });
+      }
     }
     const head = (card.textContent || "").slice(0, 300);
     return {
@@ -510,13 +578,41 @@
       if (done.has(occ.id)) continue;
       const card = findCardRoot(occ.node.parentElement, all);
       if (!card) continue;
-      if (card.querySelector(".mal-bar")) {
+
+      const existing = card.querySelector(".mal-bar");
+      if (existing) {
+        // The first pass runs before the interceptor has delivered anything,
+        // so a card can be decorated from its DOM and only later have its
+        // GraphQL record arrive. Upgrade in place when that happens, or the
+        // card keeps downloading the page's low-resolution playback copy.
+        const current = onPage.get(occ.id);
+        if (current && current.fromDom) {
+          const better = captured.get(occ.id) || matchByMedia(card);
+          if (better) {
+            const upgraded = {
+              ...better,
+              id: occ.id,
+              libraryUrl: `https://www.facebook.com/ads/library/?id=${occ.id}`,
+            };
+            onPage.set(occ.id, upgraded);
+            existing.replaceWith(buildBar(upgraded));
+          }
+        }
         done.add(occ.id);
         continue;
       }
-      // Prefer the richer GraphQL record; fall back to the card's own DOM so a
-      // card is never left without controls just because the ids differ.
-      const ad = captured.get(occ.id) || adFromCard(occ.id, card);
+      // Prefer the richer GraphQL record, by id or by matching the creative,
+      // so downloads get video_hd_url and the original image rather than the
+      // page's downscaled playback copy. Fall back to the card's own DOM so a
+      // card is never left without controls.
+      const matched = captured.get(occ.id) || matchByMedia(card);
+      const ad = matched
+        ? {
+            ...matched,
+            id: occ.id,
+            libraryUrl: `https://www.facebook.com/ads/library/?id=${occ.id}`,
+          }
+        : adFromCard(occ.id, card);
       onPage.set(occ.id, ad);
       appendBar(card, buildBar(ad));
       done.add(occ.id);

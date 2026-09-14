@@ -538,10 +538,16 @@
     card.querySelector(".act-download").addEventListener("click", async (e) => {
       const btn = e.target;
       btn.disabled = true;
-      const res = await send({ type: "DOWNLOAD_AD", ad });
+      const res = await send({
+        type: "DOWNLOAD_AD",
+        ad,
+        listId: state.activeList === "__all__" ? null : state.activeList,
+      });
       btn.disabled = false;
-      btn.textContent = res.ok ? `Got ${res.count}` : "Failed";
-      setTimeout(() => (btn.textContent = "Download"), 2000);
+      btn.textContent = res.ok
+        ? `Got ${res.count}${res.quality === "hd" ? " HD" : ""}`
+        : "Failed";
+      setTimeout(() => (btn.textContent = "Download"), 2200);
     });
     return card;
   };
@@ -783,6 +789,19 @@
        }
        <div class="toggle-row">
          <div class="toggle-text">
+           <div><strong>Download folders</strong></div>
+           <div class="toggle-sub">Where creatives land under Downloads/MetaAdsLibrary.</div>
+         </div>
+       </div>
+       <div class="form-row">
+         <select id="dl-folder">
+           <option value="list">One folder per list</option>
+           <option value="advertiser">One folder per advertiser</option>
+           <option value="flat">No subfolders</option>
+         </select>
+       </div>
+       <div class="toggle-row">
+         <div class="toggle-text">
            <div><strong>Display name</strong></div>
            <div class="toggle-sub">Shown against ads you save in a team space.</div>
          </div>
@@ -823,6 +842,12 @@
             alert(res.ok ? `Pulled ${res.pulled} new ads.` : "Pull failed");
             refresh();
           });
+        const dlSel = root.querySelector("#dl-folder");
+        dlSel.value = (state.settings || {}).downloadFolder || "list";
+        dlSel.addEventListener("change", async () => {
+          await send({ type: "SET_DOWNLOAD_FOLDER", mode: dlSel.value });
+          await refresh();
+        });
         root.querySelector("#name-save").addEventListener("click", async () => {
           const name = root.querySelector("#display-name").value.trim();
           if (!name) return;
@@ -871,7 +896,12 @@
   const bulkDownload = async () => {
     for (const id of state.selected) {
       const ad = state.ads[id];
-      if (ad) await send({ type: "DOWNLOAD_AD", ad });
+      if (ad)
+        await send({
+          type: "DOWNLOAD_AD",
+          ad,
+          listId: state.activeList === "__all__" ? null : state.activeList,
+        });
     }
   };
 
@@ -1064,10 +1094,13 @@
       /* storage blocked; the toggle still works for this session */
     }
   });
+  // Collapsed by default: the grid is what the dashboard is for, and the
+  // metrics panel pushes it below the fold. An explicit "0" means the user
+  // opened it before and wants it open.
   try {
-    applyMetricsCollapsed(localStorage.getItem("mal.metricsCollapsed") === "1");
+    applyMetricsCollapsed(localStorage.getItem("mal.metricsCollapsed") !== "0");
   } catch (err) {
-    applyMetricsCollapsed(false);
+    applyMetricsCollapsed(true);
   }
 
   $("#modal .modal-backdrop").addEventListener("click", closeModal);

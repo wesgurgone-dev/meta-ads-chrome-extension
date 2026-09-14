@@ -12,8 +12,8 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 - **Colour-coded lists.** Eight label colours, editable per list; the colour shows in the sidebar, on each ad card, and in the save menu.
 - **Cross-device sync.** Opt in and the library follows your Chrome profile to your other machines. No separate account to create.
 - **Capture from the source, not the DOM.** A page-world interceptor reads the Ad Library's own GraphQL responses, so you get fields the UI hides: HD video URLs, CTA type, destination link, and variation counts.
-- **Metrics** for the current space and filters: saves per day, top advertisers, format mix, placements, and (in a team space) who contributed what.
-- **Downloads** organized as `Downloads/MetaAdsLibrary/<advertiser>/<adId>.<ext>`, HD video preferred.
+- **Metrics**, collapsed by default so the grid leads, for the current space and filters: saves per day, top advertisers, format mix, placements, and (in a team space) who contributed what.
+- **Downloads at full resolution**, filed by list: `Downloads/MetaAdsLibrary/<list>/<advertiser>-<adId>.<ext>`. Switch to a folder per advertiser, or no subfolders, in Settings.
 - **Export** the current view as JSON or CSV.
 
 ## Install (unpacked)
@@ -45,6 +45,14 @@ Chrome caps extension sync at about 100KB, which is real and worth knowing:
 - Roughly 200 ads fit. Beyond that the most recent are synced and the Settings panel says so rather than silently dropping them.
 
 Local storage on each device is unlimited; only the synced slice is capped.
+
+## Download quality
+
+The `<video>` element on the Ad Library page plays a downscaled variant, often a `blob:` MSE stream that cannot be fetched at all. The full-resolution file is `video_hd_url` in the GraphQL response, and the unresized still is `original_image_url`.
+
+Those two are joined by matching the card's creative against the captured records: Facebook's CDN URLs carry signed, short-lived query parameters that differ between the page copy and the API copy, so the URL **path** is the stable identity. A card decorated from the DOM before the network capture arrives is upgraded in place once its record turns up, otherwise it would keep downloading the playback copy.
+
+If no HD source was captured for an ad, the download falls back to the page copy and the toast says so, rather than quietly handing you a low-resolution file.
 
 ## What this does not show, and why
 
