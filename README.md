@@ -4,8 +4,9 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 
 ## Features
 
-- **Native save controls.** A Save split-button and Download button are inserted into each ad card's own button stack, styled to match Facebook's controls, rather than floating over the creative.
+- **Native save controls.** A Save split-button and Download button are inserted into each ad card as their own full-width row, styled to match Facebook's controls, rather than floating over the creative.
 - **Save straight into a list.** The caret beside Save opens a menu of your spaces and colour-coded lists, so an ad goes where it belongs in one click.
+- **Side panel.** A slide-out workspace on the Ad Library itself, with Home, Saved, Lists and Account views: capture status and save-all, live counts, recently saved ads, and one-click pinning of the list new saves default to. The full dashboard is a link in its footer rather than the only place anything happens.
 - **Spaces.** Keep separate libraries (per client, per project). Every space has its own lists, metrics, and exports.
 - **Team spaces.** Create a team space to get a join code, export it as a space file, and teammates merge it into the same space. Everyone's lists combine and saves are attributed by name.
 - **Colour-coded lists.** Eight label colours, editable per list; the colour shows in the sidebar, on each ad card, and in the save menu.
@@ -77,7 +78,7 @@ CTR, ROAS, conversions, and an ad's social save count are never public.
 ```
 manifest.json            MV3 manifest
 content/interceptor.js   MAIN world: hooks fetch/XHR, parses GraphQL, postMessage
-content/content.js       ISOLATED world: card buttons, save menu, capture panel
+content/content.js       ISOLATED world: card action row, save menu, side panel
 background.js            service worker: spaces/lists/ads, downloads, team bundles, sync
 dashboard/metrics.js     aggregation (pure, unit-tested)
 dashboard/               spaces, colour-coded lists, metrics, team and sync UI
@@ -86,3 +87,5 @@ tests/                   node tests for the metrics module
 ```
 
 Storage shape: `spaces` hold `lists`, lists hold ad ids, and `ads` are stored once and referenced, so the same ad in two lists is one record.
+
+One layout note worth keeping: Facebook lays its card buttons out inside horizontal flex rows. Inserting our row directly beside its button makes the row just another item in that row, which squeezes and clips it. `insertBar` therefore climbs to the outermost node still inside a horizontal row before inserting, so the action row always lands on its own full-width line.
