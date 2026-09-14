@@ -1408,3 +1408,94 @@ h2,
   font-size: 12px;
   color: var(--text-2);
 }
+
+/* --------------------------------------------------------------- scoring */
+
+.score-panel {
+  margin: 18px 0 4px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--ogui-color-muted, rgba(127, 127, 127, 0.08));
+}
+
+.score-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.score-head h3 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.score-overall strong {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.score-overall span {
+  opacity: 0.5;
+  font-size: 13px;
+  margin-left: 2px;
+}
+
+.score-axes {
+  list-style: none;
+  margin: 12px 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.score-axis-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-axis-name {
+  font-weight: 550;
+  font-size: 13px;
+}
+
+.score-axis-num {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* The band is the honest unit; the number is the band's midpoint with a
+   decimal of false precision on it. Both are shown, band first. */
+.score-band {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.score-band.band-weak { color: #e34948; }
+.score-band.band-competent { color: #eda100; }
+.score-band.band-strong { color: #1baf7a; }
+.score-band.band-exceptional { color: #4a3aa7; }
+
+.score-evidence {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  opacity: 0.72;
+}
+
+.score-meta {
+  margin: 0 0 10px;
+}
+
+.score-error {
+  margin-top: 8px;
+  color: #e34948;
+}

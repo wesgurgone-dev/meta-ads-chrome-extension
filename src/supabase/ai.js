@@ -25,6 +25,7 @@ export const ask = async ({
   model = MODEL,
   teamId = null,
   thinking = { type: "adaptive" },
+  outputConfig = null,
 }) => {
   const { url } = await loadConfig();
   if (!url) return { ok: false, error: "Supabase is not configured yet." };
@@ -46,6 +47,7 @@ export const ask = async ({
         messages,
         max_tokens: maxTokens,
         thinking,
+        ...(outputConfig ? { output_config: outputConfig } : {}),
         teamId,
       }),
     });

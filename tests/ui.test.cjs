@@ -78,19 +78,27 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(mf.permissions.includes('sidePanel'), 'sidePanel permission');
   ok(!mf.action.default_popup, 'no popup, so Chrome opens the panel on the action click');
   ok(!mf.permissions.includes('scripting'), 'nothing is injected any more');
+  // Frames are decoded in an offscreen document because the worker has no DOM.
+  ok(mf.permissions.includes('offscreen'), 'offscreen permission, for video frame capture');
 
   console.log('--- bundles are MV3-safe ---');
   const bundles = await sw.evaluate(async () => {
     const get = async (f) => (await (await fetch(chrome.runtime.getURL(f))).text());
-    const [panel, dash] = await Promise.all([
+    const [panel, dash, frames] = await Promise.all([
       get('panel/panel.bundle.js'),
       get('dashboard/dashboard.bundle.js'),
+      get('offscreen/frames.js'),
     ]);
     const bad = (s) => /\beval\s*\(/.test(s) || /new\s+Function\s*\(/.test(s) || /sourceMappingURL=data:/.test(s);
     return { panelKB: Math.round(panel.length / 1024), dashKB: Math.round(dash.length / 1024),
-             panelBad: bad(panel), dashBad: bad(dash) };
+             panelBad: bad(panel), dashBad: bad(dash), framesBad: bad(frames),
+             framesGuarded: /msg\.target !== "frames-offscreen"/.test(frames) };
   });
   ok(!bundles.panelBad && !bundles.dashBad, 'no eval, no new Function, no inline source map');
+  // The offscreen document is hand-written and unbundled, so it is not covered
+  // by the two assertions above and needs its own.
+  ok(!bundles.framesBad, 'the offscreen frame extractor is MV3-safe too');
+  ok(bundles.framesGuarded, 'and only answers messages addressed to it');
   // The dashboard carries supabase-js (~220KB) and the panel does not, so they
   // get their own budgets rather than one number that hides the difference.
   ok(bundles.panelKB < 320, `panel bundle ${bundles.panelKB}KB`);
@@ -245,6 +253,44 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(fit.natural === '1080x1920', `probe is 9:16 (${fit.natural})`);
   ok(fit.fit === 'contain', 'creatives letterbox rather than stretch');
   ok(fit.h > 0 && fit.h <= fit.vh * 0.6, `a 9:16 creative fits (${fit.h}px of ${fit.vh}px)`);
+
+  console.log('--- an ad can be scored from its detail view ---');
+  // Seed one saved ad straight into the store. The dashboard is otherwise
+  // empty in this harness, and a card is needed to open a detail view at all.
+  await sw.evaluate(async () => {
+    const { lists = {}, ads = {} } = await chrome.storage.local.get(['lists', 'ads']);
+    const list = Object.values(lists)[0];
+    ads['853222324181295'] = {
+      id: '853222324181295',
+      pageName: 'Hyro',
+      isActive: true,
+      startDate: Date.UTC(2026, 0, 15),
+      body: 'Hydration that works.',
+      ctaText: 'Shop now',
+      media: [{ type: 'video', url: 'https://cdn.example/x.mp4' }],
+      savedAt: Date.now(),
+      savedBy: 'Me',
+    };
+    list.adIds = ['853222324181295'];
+    await chrome.storage.local.set({ ads, lists });
+  });
+  await dash.reload();
+  await dash.waitForTimeout(1800);
+  ok(await dash.locator('.grid .card').count() === 1, 'the seeded ad renders as a card');
+  await dash.locator('.grid .card .card-media').first().click();
+  await dash.waitForTimeout(500);
+  const score = {
+    panel: await dash.locator('.score-panel').count(),
+    button: (await dash.locator('.score-panel button').first().textContent()) || '',
+    axes: await dash.locator('.score-axes li').count(),
+  };
+  ok(score.panel === 1, 'the detail view offers a score');
+  ok(/Score this ad/.test(score.button), `and starts with the offer, not a number: ${score.button}`);
+  // Nothing has been scored, and scoring costs money: the panel must never
+  // call the model just because a modal opened.
+  ok(score.axes === 0, 'opening the modal scores nothing by itself');
+  await dash.locator('.modal-close').click();
+  await dash.waitForTimeout(300);
 
   console.log('--- team sync status reports each fact separately ---');
   // The browser in CI has no outbound network, so the project is routed here.

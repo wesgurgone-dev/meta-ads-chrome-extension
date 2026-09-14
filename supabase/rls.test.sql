@@ -150,4 +150,42 @@ select public.ai_usage_today() = 2 as pass;
 \echo '14. and cannot read anyone else:'
 select count(*) = 1 as pass from public.ai_usage;
 
+-- ---- scores are shared inside the team and invisible outside it --------
+reset role;
+insert into auth.users (id, email)
+values ('33333333-3333-3333-3333-333333333333', 'carl@example.com');
+
+set role authenticated;
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+
+insert into public.ad_scores (team_id, archive_id, rubric_version, model, axes)
+select id, '853222324181295', 'rubric_v1', 'claude-opus-5',
+       '{"hook":{"band":"strong","score":8}}'::jsonb
+from public.teams;
+
+\echo '15. a teammate reads a score somebody else paid for:'
+set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+select count(*) = 1 as pass from public.ad_scores;
+
+\echo '16. a non-member sees no scores:'
+set request.jwt.claim.sub = '33333333-3333-3333-3333-333333333333';
+select count(*) = 0 as pass from public.ad_scores;
+
+\echo '17. and cannot write one into a team they are not in:'
+do $$
+declare team uuid;
+begin
+  reset role;
+  select id into team from public.teams limit 1;
+  set role authenticated;
+  set request.jwt.claim.sub = '33333333-3333-3333-3333-333333333333';
+  begin
+    insert into public.ad_scores (team_id, archive_id, rubric_version)
+    values (team, 'forged', 'rubric_v1');
+    raise exception 'a non-member wrote a score';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select true as pass;
+
 reset role;

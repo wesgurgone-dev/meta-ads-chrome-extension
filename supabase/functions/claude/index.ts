@@ -77,14 +77,18 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Body must be JSON." }, 400);
   }
 
-  const { model, messages, system, max_tokens, thinking, teamId } = body as {
-    model?: string;
-    messages?: unknown[];
-    system?: string;
-    max_tokens?: number;
-    thinking?: unknown;
-    teamId?: string;
-  };
+  const { model, messages, system, max_tokens, thinking, output_config, teamId } =
+    body as {
+      model?: string;
+      // A string, or content blocks - blocks are what carries cache_control, and
+      // a frozen cached rubric is the whole reason the scoring prompt is stable.
+      messages?: unknown[];
+      system?: string | unknown[];
+      max_tokens?: number;
+      thinking?: unknown;
+      output_config?: unknown;
+      teamId?: string;
+    };
 
   if (!model || !ALLOWED_MODELS.has(model))
     return json({ error: `model must be one of ${[...ALLOWED_MODELS].join(", ")}` }, 400);
@@ -127,6 +131,9 @@ Deno.serve(async (req: Request) => {
       messages,
       ...(system ? { system } : {}),
       ...(thinking ? { thinking } : {}),
+      // Structured output and effort. Forwarded rather than constructed here so
+      // the rubric and its schema stay in one place, versioned together.
+      ...(output_config ? { output_config } : {}),
     }),
   });
 

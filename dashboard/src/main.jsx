@@ -20,6 +20,8 @@ import {
 } from "../../src/supabase/client.js";
 import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../../src/supabase/config.js";
 import { createTeam, joinTeam, pull, push, watch } from "../../src/supabase/sync.js";
+import { scoreAd } from "../../src/rank/index.js";
+import { AXES, AXIS_LABELS } from "../../src/rank/schema.js";
 import {
   LIST_COLORS,
   M,
@@ -285,7 +287,106 @@ const Modal = ({ onClose, children }) => (
   </div>
 );
 
-const AdDetail = ({ ad, onClose }) => {
+/**
+ * What the model thought of one ad.
+ *
+ * Three things this deliberately shows rather than hides. The band, because a 7
+ * and an 8 are not a meaningful difference and a bare number implies they are.
+ * The evidence, because a score with no citation is a vibe. And the frame count,
+ * because an ad scored from one thumbnail is not the same measurement as one
+ * scored from eight frames and should not look like it.
+ */
+const ScorePanel = ({ ad, teamId }) => {
+  const [score, setScore] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    send({ type: "SCORES_GET", adIds: [ad.id] }).then((res) => {
+      if (!live) return;
+      setScore((res && res.scores && res.scores[ad.id]) || null);
+      setLoaded(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [ad.id]);
+
+  const run = async (force) => {
+    setBusy(true);
+    setError(null);
+    const res = await scoreAd(ad, { teamId, force });
+    setBusy(false);
+    if (res.ok) setScore(res.score);
+    else setError(res.error);
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="score-panel">
+      <div className="score-head">
+        <h3>Score</h3>
+        {score ? (
+          <div className="score-overall">
+            <strong>{score.overall}</strong>
+            <span>/10</span>
+          </div>
+        ) : null}
+      </div>
+
+      {score ? (
+        <>
+          <ul className="score-axes">
+            {AXES.map((axis) => {
+              const a = (score.axes || {})[axis];
+              if (!a) return null;
+              return (
+                <li key={axis}>
+                  <div className="score-axis-head">
+                    <span className="score-axis-name">{AXIS_LABELS[axis]}</span>
+                    <span className={`score-band band-${a.band}`}>{a.band}</span>
+                    <span className="score-axis-num">{a.score}</span>
+                  </div>
+                  <p className="score-evidence">{a.evidence}</p>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="note score-meta">
+            {score.frameKind === "video"
+              ? `From ${score.frames} frames`
+              : "From the thumbnail only, so the pacing axes are weaker than they look"}
+            {" · "}
+            {score.model}
+            {" · "}
+            {score.rubricVersion}
+            {score.problems ? ` · ${score.problems.join("; ")}` : ""}
+          </p>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(true)}>
+            {busy ? "Scoring..." : "Score again"}
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="note">
+            Scores four axes out of ten from the frames captured when this ad was
+            saved: hook, utility, succinctness and production. It costs a call to
+            the model, so the result is cached and shared with your team.
+          </p>
+          <Button size="sm" disabled={busy} onClick={() => run(false)}>
+            {busy ? "Scoring..." : "Score this ad"}
+          </Button>
+        </>
+      )}
+      {error ? <p className="note score-error">{error}</p> : null}
+    </div>
+  );
+};
+
+const AdDetail = ({ ad, onClose, teamId }) => {
   const rows = [
     ["Advertiser", ad.pageName],
     ["Library ID", ad.id],
@@ -344,6 +445,7 @@ const AdDetail = ({ ad, onClose }) => {
           )
         )}
       </div>
+      <ScorePanel ad={ad} teamId={teamId} />
       <table className="detail-table">
         <tbody>
           {rows.map(([k, v]) => (
@@ -1419,7 +1521,11 @@ const App = () => {
       </main>
 
       {modal && modal.kind === "ad" && (
-        <AdDetail ad={modal.ad} onClose={() => setModal(null)} />
+        <AdDetail
+          ad={modal.ad}
+          teamId={(space && space.teamId) || null}
+          onClose={() => setModal(null)}
+        />
       )}
       {modal && modal.kind === "list" && (
         <ListSettings

@@ -105,6 +105,43 @@ create table if not exists public.list_ads (
 
 create index if not exists list_ads_ad_idx on public.list_ads (ad_id);
 
+-- --------------------------------------------------------------- ad_scores
+--
+-- What the model thought of one ad, cached so nobody pays twice for it.
+--
+-- Keyed by (team_id, archive_id, rubric_version), not by ads.id, for the same
+-- reason everything client-side is: archive_id is the only ad id the extension
+-- holds, and (team_id, archive_id) is already unique on ads. There is
+-- deliberately no foreign key to ads - a score should outlive the library
+-- record being tidied away, and an offline teammate can score an ad before its
+-- row has landed.
+--
+-- rubric_version is on the key, not beside it. The rubric is a prompt; editing
+-- it changes the scale. Versioning it means an edit makes old scores visibly
+-- non-comparable instead of quietly mixing two scales on one chart.
+--
+-- No overall column. The weighted mean is computed in the client so the weights
+-- can be retuned without re-scoring anything.
+
+create table if not exists public.ad_scores (
+  team_id        uuid not null references public.teams (id) on delete cascade,
+  archive_id     text not null,
+  rubric_version text not null,
+  model          text,
+  axes           jsonb not null default '{}'::jsonb,
+  frames         int,
+  frame_kind     text,
+  usage          jsonb,
+  problems       jsonb,
+  created_by     uuid references auth.users (id) on delete set null,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  primary key (team_id, archive_id, rubric_version)
+);
+
+create index if not exists ad_scores_team_idx
+  on public.ad_scores (team_id, updated_at);
+
 -- ------------------------------------------------------------------ grants
 --
 -- RLS decides which rows a role may touch; it does not grant the role the
@@ -120,12 +157,12 @@ grant usage on schema public to authenticated;
 
 grant select, insert, update, delete on
   public.profiles, public.teams, public.team_members,
-  public.lists, public.ads, public.list_ads
+  public.lists, public.ads, public.list_ads, public.ad_scores
   to authenticated;
 
 revoke all on
   public.profiles, public.teams, public.team_members,
-  public.lists, public.ads, public.list_ads
+  public.lists, public.ads, public.list_ads, public.ad_scores
   from anon;
 
 -- ------------------------------------------------------------- row security
@@ -136,6 +173,7 @@ alter table public.team_members enable row level security;
 alter table public.lists        enable row level security;
 alter table public.ads          enable row level security;
 alter table public.list_ads     enable row level security;
+alter table public.ad_scores    enable row level security;
 
 -- Membership test, in one place. security definer so the policy on
 -- team_members does not have to consult team_members and recurse.
@@ -185,7 +223,7 @@ create policy members_self_delete on public.team_members
 do $$
 declare t text;
 begin
-  foreach t in array array['lists', 'ads'] loop
+  foreach t in array array['lists', 'ads', 'ad_scores'] loop
     execute format('drop policy if exists %1$s_member on public.%1$s', t);
     execute format(
       'create policy %1$s_member on public.%1$s for all
@@ -272,7 +310,7 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['lists', 'ads'] loop
+  foreach t in array array['lists', 'ads', 'ad_scores'] loop
     execute format('drop trigger if exists %1$s_touch on public.%1$s', t);
     execute format(
       'create trigger %1$s_touch before update on public.%1$s

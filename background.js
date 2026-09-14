@@ -8,6 +8,13 @@
  *   ads:      { [adId]: normalizedAd & { savedAt, savedBy, thumbDataUrl? } }
  *   settings: { activeSpaceId, syncEnabled }
  *   identity: { userId, displayName }
+ *   frames_<adId>: { v, adId, source, duration, frames[{t, dataUrl}], error? }
+ *   frameQueue: [{ adId, url, source }] - pending video frame extractions
+ *   scores:   { [adId]: { adId, rubricVersion, model, axes, overall, ... } }
+ *
+ * frames_* keys are deliberately top-level rather than fields on the ad record:
+ * getStore() deserialises every ad on every state read, and a few hundred KB of
+ * JPEG per ad would make that unusable.
  *
  * Ads are stored once and referenced by lists, so the same ad saved into two
  * lists is one record. A space's ads are the union of its lists' adIds.
@@ -139,6 +146,11 @@ chrome.runtime.onInstalled.addListener(() => {
   ensureBootstrapped();
 });
 
+// A worker death mid-batch leaves jobs in the queue; any later wake resumes it.
+chrome.runtime.onStartup.addListener(() => {
+  pumpFrames();
+});
+
 // ---------------------------------------------------------------------------
 // Thumbnails: CDN URLs are signed and expire, so keep a small local preview.
 // ---------------------------------------------------------------------------
@@ -169,6 +181,161 @@ const pickThumbSource = (ad) => {
     if (m.type === "image" && m.url) return m.url;
   }
   return null;
+};
+
+// ---------------------------------------------------------------------------
+// Video frames
+//
+// Scoring an ad needs to see it, and a 160KB thumbnail is not seeing it. Frames
+// are captured at save time, not at score time, because fbcdn links are signed
+// and dead within hours - by the time someone clicks Score, the only ad worth
+// scoring (the one that has been running for months) is the one whose URL has
+// certainly expired.
+//
+// The decode happens in offscreen/frames.js because the worker has no DOM. This
+// half owns the queue, the single offscreen document, and cleanup; it never
+// holds a frame in memory.
+// ---------------------------------------------------------------------------
+
+const FRAMES_IDLE_CLOSE_MS = 15000;
+const OFFSCREEN_PATH = "offscreen/frames.html";
+
+let offscreenReady = null;
+let offscreenCloseTimer = null;
+let framesPumping = false;
+
+/** The best video URL on an ad, and how good it is, so a low-res capture can be
+ *  redone when the HD record arrives later. */
+const pickVideoSource = (ad) => {
+  for (const m of ad.media || []) {
+    if (m.type !== "video") continue;
+    if (m.hdUrl && /^https?:/.test(m.hdUrl)) return { url: m.hdUrl, source: "hd" };
+    if (m.sdUrl && /^https?:/.test(m.sdUrl)) return { url: m.sdUrl, source: "sd" };
+    if (m.url && /^https?:/.test(m.url)) return { url: m.url, source: "sd" };
+  }
+  return null;
+};
+
+/**
+ * One offscreen document per profile, so creation has to be serialised: a
+ * second createDocument() while the first is in flight throws.
+ */
+const ensureOffscreen = async () => {
+  if (offscreenCloseTimer) {
+    clearTimeout(offscreenCloseTimer);
+    offscreenCloseTimer = null;
+  }
+  if (!offscreenReady) {
+    offscreenReady = (async () => {
+      const existing = await chrome.runtime.getContexts({
+        contextTypes: ["OFFSCREEN_DOCUMENT"],
+      });
+      if (existing.length) return;
+      await chrome.offscreen.createDocument({
+        url: OFFSCREEN_PATH,
+        reasons: ["BLOBS"],
+        justification:
+          "Decode a saved ad video into still frames. The video is fetched first and read from a blob URL.",
+      });
+    })().catch((err) => {
+      offscreenReady = null;
+      throw err;
+    });
+  }
+  return offscreenReady;
+};
+
+const closeOffscreenLater = () => {
+  if (offscreenCloseTimer) clearTimeout(offscreenCloseTimer);
+  offscreenCloseTimer = setTimeout(async () => {
+    offscreenCloseTimer = null;
+    offscreenReady = null;
+    try {
+      await chrome.offscreen.closeDocument();
+    } catch (err) {
+      /* already closed, or never opened */
+    }
+  }, FRAMES_IDLE_CLOSE_MS);
+};
+
+/** The queue is persisted so a worker death mid-batch resumes rather than
+ *  silently dropping the rest. */
+const enqueueFrames = async (jobs) => {
+  if (!jobs.length) return;
+  const { frameQueue = [] } = await chrome.storage.local.get("frameQueue");
+  const known = new Set(frameQueue.map((j) => j.adId));
+  const next = [...frameQueue];
+  for (const job of jobs) {
+    if (known.has(job.adId)) continue;
+    known.add(job.adId);
+    next.push(job);
+  }
+  await chrome.storage.local.set({ frameQueue: next });
+  pumpFrames();
+};
+
+const pumpFrames = async () => {
+  if (framesPumping) return;
+  framesPumping = true;
+  try {
+    for (;;) {
+      const { frameQueue = [] } = await chrome.storage.local.get("frameQueue");
+      const job = frameQueue[0];
+      if (!job) break;
+
+      let result;
+      try {
+        await ensureOffscreen();
+        result = await chrome.runtime.sendMessage({
+          target: "frames-offscreen",
+          type: "EXTRACT_FRAMES",
+          adId: job.adId,
+          url: job.url,
+          source: job.source,
+        });
+      } catch (err) {
+        result = { ok: false, error: String(err?.message || err) };
+      }
+
+      // A failure is recorded rather than retried forever: a signed URL that
+      // has expired will never succeed, and an ad with no frames must read as
+      // "could not capture", not as an ad that scored badly.
+      if (!result || !result.ok) {
+        await chrome.storage.local.set({
+          [`frames_${job.adId}`]: {
+            v: 1,
+            adId: job.adId,
+            source: job.source,
+            error: (result && result.error) || "extraction failed",
+            capturedAt: Date.now(),
+            frames: [],
+          },
+        });
+      }
+
+      const { frameQueue: current = [] } =
+        await chrome.storage.local.get("frameQueue");
+      await chrome.storage.local.set({
+        frameQueue: current.filter((j) => j.adId !== job.adId),
+      });
+    }
+  } finally {
+    framesPumping = false;
+    closeOffscreenLater();
+  }
+};
+
+/** Frames are large and are stored under their own keys, never on the ad
+ *  record, because getStore() deserialises every ad on every state read. */
+const dropFrames = async (adIds) => {
+  const keys = adIds.map((id) => `frames_${id}`);
+  if (keys.length) await chrome.storage.local.remove(keys);
+};
+
+const getFrames = async (adId) => {
+  const key = `frames_${adId}`;
+  const stored = await chrome.storage.local.get(key);
+  return stored[key] || null;
 };
 
 // ---------------------------------------------------------------------------
@@ -226,6 +393,7 @@ const handleSaveAds = async (incoming, listId) => {
 
   let added = 0;
   const toThumb = [];
+  const toFrames = [];
   const memberIds = new Set(target.adIds);
 
   for (const ad of incoming) {
@@ -238,7 +406,16 @@ const handleSaveAds = async (incoming, listId) => {
         savedByog: identity.userId,
       };
       toThumb.push(ad.id);
+      const video = pickVideoSource(ad);
+      if (video) toFrames.push({ adId: ad.id, ...video });
     } else {
+      // A card first saved from the DOM carries a low-res video; the GraphQL
+      // record arriving later upgrades it, and frames taken from the low-res
+      // copy would otherwise stay permanent.
+      const before = pickVideoSource(ads[ad.id]);
+      const after = pickVideoSource(ad);
+      if (after && after.source === "hd" && (!before || before.source !== "hd"))
+        toFrames.push({ adId: ad.id, ...after });
       // Refresh volatile fields (media URLs, active state), keep provenance.
       ads[ad.id] = {
         ...ads[ad.id],
@@ -271,6 +448,10 @@ const handleSaveAds = async (incoming, listId) => {
     }
     if (dirty) await chrome.storage.local.set({ ads });
   })();
+
+  // Frames are the same class of work as thumbnails - best effort, after the
+  // response, and only for video ads.
+  if (toFrames.length) enqueueFrames(toFrames);
 
   return { ok: true, added, listId: target.id, listName: target.name };
 };
@@ -426,8 +607,14 @@ const handleSpaceOp = async (msg) => {
       const referenced = new Set();
       for (const list of Object.values(lists))
         for (const id of list.adIds) referenced.add(id);
+      const reaped = [];
       for (const id of Object.keys(ads))
-        if (!referenced.has(id)) delete ads[id];
+        if (!referenced.has(id)) {
+          reaped.push(id);
+          delete ads[id];
+        }
+      await dropFrames(reaped);
+      await dropScores(reaped);
       if (settings.activeSpaceId === msg.spaceId)
         settings.activeSpaceId = Object.keys(spaces)[0];
       await chrome.storage.local.set({ spaces, lists, ads, settings });
@@ -609,6 +796,8 @@ const handleDeleteAds = async (adIds) => {
     list.adIds = list.adIds.filter((id) => !remove.has(id));
   }
   await chrome.storage.local.set({ ads, lists });
+  await dropFrames([...remove]);
+  await dropScores([...remove]);
   return { ok: true };
 };
 
@@ -803,6 +992,67 @@ const handleSyncStatus = async () => {
   };
 };
 
+/**
+ * Capture frames on demand for ads that have none. Used by the score button so
+ * an ad saved before this feature existed can still be scored - it will only
+ * work while its CDN URL is still signed, which is why capture at save time is
+ * the real path and this is the fallback.
+ */
+const handleFramesRequest = async (adIds) => {
+  const { ads } = await getStore();
+  const jobs = [];
+  const already = [];
+  for (const id of adIds) {
+    const ad = ads[id];
+    if (!ad) continue;
+    const existing = await getFrames(id);
+    if (existing && existing.frames && existing.frames.length) {
+      already.push(id);
+      continue;
+    }
+    const video = pickVideoSource(ad);
+    if (video) jobs.push({ adId: id, ...video });
+  }
+  await enqueueFrames(jobs);
+  return { ok: true, queued: jobs.length, already: already.length };
+};
+
+// ---------------------------------------------------------------------------
+// Scores
+//
+// Small enough to keep in one object, and deliberately outside getStore() so a
+// state read does not carry them. Keyed by ad, then by rubric version, so an
+// edit to the rubric makes old scores visibly non-comparable rather than
+// silently so.
+// ---------------------------------------------------------------------------
+
+const handleScoresGet = async (adIds) => {
+  const { scores = {} } = await chrome.storage.local.get("scores");
+  if (!adIds || !adIds.length) return { ok: true, scores };
+  const out = {};
+  for (const id of adIds) if (scores[id]) out[id] = scores[id];
+  return { ok: true, scores: out };
+};
+
+const handleScoreSave = async (score) => {
+  if (!score || !score.adId) return { ok: false, error: "no_ad" };
+  const { scores = {} } = await chrome.storage.local.get("scores");
+  scores[score.adId] = score;
+  await chrome.storage.local.set({ scores });
+  return { ok: true };
+};
+
+const dropScores = async (adIds) => {
+  const { scores = {} } = await chrome.storage.local.get("scores");
+  let dirty = false;
+  for (const id of adIds)
+    if (scores[id]) {
+      delete scores[id];
+      dirty = true;
+    }
+  if (dirty) await chrome.storage.local.set({ scores });
+};
+
 // ---------------------------------------------------------------------------
 // Message router
 // ---------------------------------------------------------------------------
@@ -863,6 +1113,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return respond(handleListOp(msg));
     case "DELETE_ADS":
       return respond(handleDeleteAds(msg.adIds || []));
+    case "FRAMES_GET":
+      return respond(
+        getFrames(msg.adId).then((frames) => ({ ok: true, frames })),
+      );
+    case "FRAMES_REQUEST":
+      return respond(handleFramesRequest(msg.adIds || []));
+    case "SCORES_GET":
+      return respond(handleScoresGet(msg.adIds || []));
+    case "SCORE_SAVE":
+      return respond(handleScoreSave(msg.score));
     case "SYNC_SET":
       return respond(handleSyncSet(msg.enabled));
     case "SYNC_PUSH":
