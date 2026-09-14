@@ -85,20 +85,23 @@ export const collectImages = (ad, frameRecord) => {
 };
 
 const TASK =
-  "Score this ad now. Follow the rubric exactly: evidence, then frame index, then band, then score, for each of the four axes. Frame indices refer to the labelled frames above.";
+  "Score this ad now. Follow the rubric exactly: evidence, then the beat it came from, then band, then score, for each of the four axes.";
 
-export const buildMessages = (ad, { images, note }) => {
-  const content = [{ type: "text", text: adFacts(ad) }];
-  if (note) content.push({ type: "text", text: note });
-  for (const img of images) {
-    content.push({ type: "text", text: img.label });
-    content.push({
-      type: "image",
-      source: { type: "base64", media_type: img.mediaType, data: img.data },
-    });
-  }
-  content.push({ type: "text", text: TASK });
-  return [{ role: "user", content }];
+/**
+ * Text only. The record above already contains what the frames showed, so
+ * sending the images again would pay for vision twice to learn nothing new -
+ * and would make a re-score after a rubric edit as expensive as the first one.
+ */
+export const buildMessages = (ad, understanding, markdown) => {
+  const parts = [
+    "## The advertiser's own copy",
+    adFacts(ad),
+    "",
+    markdown,
+  ];
+  if (understanding && understanding.problems)
+    parts.push("", `Note: this record was flagged as incomplete (${understanding.problems.join("; ")}).`);
+  return [{ role: "user", content: [{ type: "text", text: parts.join("\n") }, { type: "text", text: TASK }] }];
 };
 
 /**
@@ -152,17 +155,20 @@ export const failureMessage = (code, detail) => {
 /**
  * Score one ad. Returns { ok: true, score } or { ok: false, code, detail }.
  *
- * `url` and `token` are the Supabase project URL and the caller's access token,
- * both read from storage by the worker.
+ * Reads the written record from src/understand rather than the frames. That is
+ * what makes this call fast enough to run on every save, and cheap enough to
+ * re-run whenever the rubric changes.
  */
 export const scoreAd = async (
   ad,
-  { frames, url, anonKey, token, teamId = null, model = MODEL, fast = false },
+  { understanding, markdown, url, anonKey, token, teamId = null, model = MODEL, fast = false },
 ) => {
   const startedAt = Date.now();
-  const seen = collectImages(ad, frames);
-  if (!seen.images.length)
-    return { ok: false, code: FAILURE.NOTHING_TO_SEE, detail: seen.note };
+  // No record means nothing to judge. The extraction pass runs first and the
+  // queue will not reach here without it, so this is a guard rather than a
+  // path anyone should hit.
+  if (!markdown)
+    return { ok: false, code: FAILURE.NOTHING_TO_SEE, detail: "the ad has not been watched yet" };
   if (!url) return { ok: false, code: FAILURE.SIGNED_OUT };
   // Signed out, the publishable key is the credential. The function only
   // honours it when its own ALLOW_ANON secret is set, so this cannot widen
@@ -184,7 +190,7 @@ export const scoreAd = async (
         // Blocks, not a string: cache_control is what makes the frozen rubric a
         // cached prefix instead of a few thousand tokens paid for per ad.
         system: [{ type: "text", text: RUBRIC, cache_control: { type: "ephemeral" } }],
-        messages: buildMessages(ad, seen),
+        messages: buildMessages(ad, understanding, markdown),
         // Thinking is on by default on this model and counts against the
         // ceiling, so this is sized for a short reasoning pass plus the JSON -
         // not for the JSON alone, which would truncate mid-object.
@@ -253,8 +259,8 @@ export const scoreAd = async (
       model,
       axes: parsed.axes,
       overall: overallScore(parsed.axes),
-      frames: seen.images.length,
-      frameKind: seen.kind,
+      frames: (understanding && understanding.frames) || 0,
+      frameKind: understanding ? "record" : "none",
       usage: reply.usage || null,
       // Whether the rubric was served from cache. See MODEL above: on Sonnet 5
       // a prefix under 1024 tokens fails to cache silently.

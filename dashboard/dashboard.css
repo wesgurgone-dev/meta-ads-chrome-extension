@@ -1925,3 +1925,29 @@ h2,
     height: 60vh;
   }
 }
+
+/* The record the AI wrote when it watched the ad. Collapsed, because it is
+   evidence rather than something to read every time. */
+.score-watched {
+  margin: 10px 0 14px;
+  font-size: 12.5px;
+}
+
+.score-watched summary {
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.score-watched pre {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.1);
+  max-height: 42vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  opacity: 0.85;
+}

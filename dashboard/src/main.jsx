@@ -28,7 +28,7 @@ import {
   push,
   watch,
 } from "../../src/supabase/sync.js";
-import { deriveTerms, seedProfile } from "../../src/discover/terms.js";
+import { bestTerms, seedProfile } from "../../src/discover/terms.js";
 import { rankCompetitors } from "../../src/discover/score.js";
 import { MAX_TERMS, sweep, sweepFailed } from "../../src/discover/sweep.js";
 import { CanvasView } from "./canvas.jsx";
@@ -337,15 +337,20 @@ const ScoreBadge = ({ score, size = "sm" }) => {
 const ScorePanel = ({ ad }) => {
   const [score, setScore] = useState(null);
   const [status, setStatus] = useState(null);
+  const [watched, setWatched] = useState(null);
+  const [markdown, setMarkdown] = useState("");
   const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [got, stat] = await Promise.all([
+    const [got, stat, seen] = await Promise.all([
       send({ type: "SCORES_GET", adIds: [ad.id] }),
       send({ type: "SCORE_STATUS" }),
+      send({ type: "UNDERSTANDING_GET", adId: ad.id, ad }),
     ]);
     setScore((got && got.scores && got.scores[ad.id]) || null);
     setStatus(stat || null);
+    setWatched((seen && seen.understanding) || null);
+    setMarkdown((seen && seen.markdown) || "");
     setLoaded(true);
   }, [ad.id]);
 
@@ -354,7 +359,13 @@ const ScorePanel = ({ ad }) => {
     // The worker writes scores as they land, so the panel follows storage
     // rather than polling.
     const onChange = (changes, area) => {
-      if (area === "local" && (changes.scores || changes.scoreQueue || changes.scoreBlock))
+      if (
+        area === "local" &&
+        (changes.scores ||
+          changes.scoreQueue ||
+          changes.scoreBlock ||
+          changes[`understanding_${ad.id}`])
+      )
         refresh();
     };
     chrome.storage.onChanged.addListener(onChange);
@@ -372,6 +383,15 @@ const ScorePanel = ({ ad }) => {
         <h3>Score</h3>
         {score && !score.failed ? <ScoreBadge score={score} size="lg" /> : null}
       </div>
+
+      {watched ? (
+        <details className="score-watched">
+          <summary>
+            What the AI saw: {watched.product.what} &middot; {watched.product.niche}
+          </summary>
+          <pre>{markdown}</pre>
+        </details>
+      ) : null}
 
       {score && !score.failed ? (
         <>
@@ -1144,10 +1164,21 @@ const Discover = ({ state, lists, activeList }) => {
     return (list.adIds || []).map((id) => state.ads[id]).filter(Boolean);
   }, [state, listId]);
 
-  const suggest = () => {
-    const derived = deriveTerms(seedAds, { limit: MAX_TERMS });
-    setTerms(derived);
-    setEdited(derived.map((t) => t.term).join("\n"));
+  const [source, setSource] = useState(null);
+
+  const suggest = async () => {
+    // What the ads are, not what their captions say. The records come from the
+    // pass that watched each video when it was saved; falling back to the copy
+    // is a much weaker answer and the UI says which one it used.
+    const got = await send({
+      type: "UNDERSTANDINGS_GET",
+      adIds: seedAds.map((a) => a.id),
+    });
+    const records = Object.values((got && got.understandings) || {});
+    const derived = bestTerms(seedAds, records, { limit: MAX_TERMS });
+    setTerms(derived.terms);
+    setSource(derived);
+    setEdited(derived.terms.map((t) => t.term).join("\n"));
     setResults(null);
     setWarning(null);
   };
@@ -1203,6 +1234,20 @@ const Discover = ({ state, lists, activeList }) => {
       {terms.length > 0 && (
         <Surface className="discover-step" material="clear">
           <h2>2. Edit the terms</h2>
+          {source && source.source === "watched" ? (
+            <p className="note">
+              From what {source.ads} {source.ads === 1 ? "ad was" : "ads were"}{" "}
+              actually about, read off the videos when they were saved
+              {source.niches && source.niches.length ? `: ${source.niches[0]}` : ""}.
+            </p>
+          ) : (
+            <p className="note score-error">
+              These came from the ad copy, not the videos, so they are the
+              advertisers' own words and will mostly find those advertisers.
+              Ads saved from now on are watched automatically; re-save these, or
+              open one and press Score now, to get better terms.
+            </p>
+          )}
           <p className="note">
             One per line, at most {MAX_TERMS}. Each one opens a background Ad
             Library search on your own Facebook session, with a pause between

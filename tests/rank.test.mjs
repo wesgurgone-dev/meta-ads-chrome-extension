@@ -29,6 +29,7 @@ import {
   isBlocking,
   splitDataUrl,
 } from "../src/rank/call.js";
+import { toMarkdown } from "../src/understand/schema.js";
 
 let pass = 0,
   fail = 0;
@@ -57,13 +58,13 @@ for (const axis of ["HOOK", "UTILITY", "SUCCINCTNESS", "PRODUCTION QUALITY"])
 
 console.log("\n--- the schema forces evidence before the number ---");
 const axisProps = Object.keys(SCORE_SCHEMA.properties.axes.properties.hook.properties);
-eq(axisProps, ["evidence", "frame_index", "band", "score"], "field order is evidence, frame, band, score");
+eq(axisProps, ["evidence", "beat", "band", "score"], "field order is evidence, beat, band, score");
 eq(SCORE_SCHEMA.properties.rubric_version.enum, [RUBRIC_VERSION], "the version is pinned in the schema");
 ok(SCORE_SCHEMA.additionalProperties === false, "no extra top-level keys");
 eq(SCORE_SCHEMA.properties.axes.required, AXES, "all four axes are required");
 
 console.log("\n--- validation catches a band that disagrees with its score ---");
-const axis = (band, score) => ({ evidence: "a legible claim by frame 1", frame_index: 0, band, score });
+const axis = (band, score) => ({ evidence: "a legible claim in the first beat", beat: "0-3s", band, score });
 const result = (over = {}) => ({
   rubric_version: RUBRIC_VERSION,
   axes: {
@@ -178,16 +179,30 @@ eq(stillOnly.kind, "still", "an ad whose frames failed falls back to the thumbna
 ok(/video too large/.test(stillOnly.note), "and the prompt is told why it is looking at one image");
 eq(collectImages({ id: "1" }, null).images.length, 0, "an ad with nothing to look at yields nothing");
 
-const messages = buildMessages({ id: "1", pageName: "Hyro", body: "Three minerals." }, withFrames);
+// Scoring is text only now. The frames were watched once by the extraction
+// pass; sending them again would pay for vision twice to learn nothing, and
+// would make a re-score after a rubric edit as expensive as the first one.
+const record = {
+  product: { what: "electrolyte drink powder", niche: "sugar-free hydration", category: "drink mix", brand_role: "the advertiser sells it" },
+  audience: { who: "endurance athletes", problem: "cramping on long rides" },
+  claims: ["no sugar"],
+  format: { kind: "demo", style: "kitchen bench", has_speech: true, on_screen_text: ["NO SUGAR"] },
+  hook: { what_happens: "hands tear a sachet", device: "tight product open" },
+  beats: [{ at: "0-3s", what: "hands tear a sachet", purpose: "hook" }],
+  production: { lighting: "window light", framing: "tight", stability: "tripod", text_legibility: "large", edit: "clean", aspect: "9:16" },
+  discovery: { search_terms: ["electrolyte powder"], adjacent_products: [], competitor_guesses: [] },
+  summary: "A demo of an electrolyte powder.",
+};
+const md = toMarkdown(record, { pageName: "Hyro" });
+const messages = buildMessages({ id: "1", pageName: "Hyro", body: "Three minerals." }, record, md);
 eq(messages.length, 1, "one user message");
 const kinds = messages[0].content.map((b) => b.type);
-eq(kinds[0], "text", "the ad copy leads");
-eq(kinds.filter((k) => k === "image").length, 2, "then the frames");
+ok(!kinds.includes("image"), "no images: the record carries what the frames showed");
 eq(kinds[kinds.length - 1], "text", "and the instruction comes last");
-ok(
-  messages[0].content.some((b) => b.type === "text" && /Frame 1 at 1.5s/.test(b.text)),
-  "each frame is labelled with its timestamp, which is what makes frame_index mean anything",
-);
+const sent = messages[0].content[0].text;
+ok(/Body copy: Three minerals\./.test(sent), "the advertiser's own copy is included");
+ok(/electrolyte drink powder/.test(sent), "and what the ad actually turned out to be");
+ok(/0-3s/.test(sent), "with the beats, which is what the evidence cites");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

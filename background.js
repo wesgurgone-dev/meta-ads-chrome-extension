@@ -9,6 +9,9 @@
  *   settings: { activeSpaceId, syncEnabled, captureFrames, fastScoring }
  *   identity: { userId, displayName }
  *   frames_<adId>: { v, adId, source, duration, frames[{t, dataUrl}], error? }
+ *   understanding_<adId>: what the ad actually is, watched once - product,
+ *             niche, audience, claims, beats, production, discovery terms.
+ *             Everything downstream reads this instead of the ad's copy.
  *   frameQueue: [{ adId, url, source }] - pending video frame extractions
  *   scores:   { [adId]: { adId, rubricVersion, model, axes, overall, ... } }
  *             or { adId, failed, error } when an ad could not be scored
@@ -28,12 +31,16 @@
 import { DEFAULT_CONFIG } from "./src/supabase/config.js";
 import {
   FAILURE,
+  adFacts,
+  collectImages,
   failureMessage,
   isBlocking,
   readRemoteScore,
   scoreAd as scoreAdWithProxy,
   writeRemoteScore,
 } from "./src/rank/call.js";
+import { extractUnderstanding } from "./src/understand/extract.js";
+import { UNDERSTANDING_VERSION, toMarkdown } from "./src/understand/schema.js";
 
 const THUMB_MAX_BYTES = 160 * 1024;
 
@@ -357,7 +364,8 @@ const pumpFrames = async () => {
 /** Frames are large and are stored under their own keys, never on the ad
  *  record, because getStore() deserialises every ad on every state read. */
 const dropFrames = async (adIds) => {
-  const keys = adIds.map((id) => `frames_${id}`);
+  const keys = [];
+  for (const id of adIds) keys.push(`frames_${id}`, `understanding_${id}`);
   if (keys.length) await chrome.storage.local.remove(keys);
 };
 
@@ -1318,7 +1326,22 @@ const enqueueScores = async (adIds) => {
  */
 const SCORE_CONCURRENCY = 3;
 
-/** One ad. Returns "done", "drop", or a blocking failure code. */
+const getUnderstanding = async (adId) => {
+  const key = `understanding_${adId}`;
+  const stored = await chrome.storage.local.get(key);
+  const record = stored[key];
+  return record && record.v === UNDERSTANDING_VERSION ? record : null;
+};
+
+/**
+ * One ad, watched then judged. Returns "done", "drop", or a blocking code.
+ *
+ * The two halves are deliberately separate calls. Watching is the expensive
+ * one - it is the only thing in this product that looks at pixels - and it is
+ * paid once per ad and kept. Judging reads what was written down, which is why
+ * a re-score after a rubric edit costs almost nothing and still works on an ad
+ * whose CDN links expired months ago.
+ */
 const scoreOne = async (adId, ctx) => {
   const { ads } = await getStore();
   const ad = ads[adId];
@@ -1331,8 +1354,46 @@ const scoreOne = async (adId, ctx) => {
     return "drop";
   }
 
-  const frames = await getFrames(adId);
-  const res = await scoreAdWithProxy(ad, { frames, ...ctx });
+  let understanding = await getUnderstanding(adId);
+  if (!understanding) {
+    const frames = await getFrames(adId);
+    const seen = collectImages(ad, frames);
+    if (!seen.images.length) {
+      await handleScoreSave({
+        adId,
+        rubricVersion: null,
+        failed: FAILURE.NOTHING_TO_SEE,
+        error: failureMessage(FAILURE.NOTHING_TO_SEE, seen.note),
+        createdAt: Date.now(),
+      });
+      return "drop";
+    }
+    const watched = await extractUnderstanding(ad, {
+      facts: adFacts(ad),
+      images: seen.images,
+      FAILURE,
+      ...ctx,
+    });
+    if (!watched.ok) {
+      if (isBlocking(watched.code)) return watched.code;
+      await handleScoreSave({
+        adId,
+        rubricVersion: null,
+        failed: watched.code,
+        error: failureMessage(watched.code, watched.detail),
+        createdAt: Date.now(),
+      });
+      return "drop";
+    }
+    understanding = watched.understanding;
+    await chrome.storage.local.set({ [`understanding_${adId}`]: understanding });
+  }
+
+  const res = await scoreAdWithProxy(ad, {
+    understanding,
+    markdown: toMarkdown(understanding, ad),
+    ...ctx,
+  });
 
   if (res.ok) {
     await handleScoreSave(res.score);
@@ -1552,6 +1613,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return respond(handleScoreRequest(msg.adIds || [], msg.force));
     case "SCORE_STATUS":
       return respond(handleScoreStatus());
+    case "UNDERSTANDINGS_GET":
+      return respond(
+        (async () => {
+          const keys = (msg.adIds || []).map((id) => `understanding_${id}`);
+          const got = keys.length ? await chrome.storage.local.get(keys) : {};
+          const out = {};
+          for (const id of msg.adIds || []) {
+            const record = got[`understanding_${id}`];
+            if (record && record.v === UNDERSTANDING_VERSION) out[id] = record;
+          }
+          return { ok: true, understandings: out };
+        })(),
+      );
+    case "UNDERSTANDING_GET":
+      return respond(
+        getUnderstanding(msg.adId).then((understanding) => ({
+          ok: true,
+          understanding,
+          markdown: understanding ? toMarkdown(understanding, msg.ad || {}) : "",
+        })),
+      );
     case "CANVAS_OP":
       return respond(handleCanvasOp(msg));
     case "APPLY_CANVAS_SYNC":

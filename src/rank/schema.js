@@ -28,10 +28,14 @@ export const BANDS = {
 const axisSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["evidence", "frame_index", "band", "score"],
+  // Order is load-bearing: the model generates left to right, so evidence and
+  // the beat it came from are committed before the band, and the band before
+  // the number. v2 cites a beat timestamp rather than a frame index, because
+  // scoring now reads the written record rather than the frames.
+  required: ["evidence", "beat", "band", "score"],
   properties: {
     evidence: { type: "string", maxLength: 240 },
-    frame_index: { type: "integer", minimum: 0, maximum: 15 },
+    beat: { type: "string", maxLength: 24 },
     band: { type: "string", enum: Object.keys(BANDS) },
     score: { type: "integer", minimum: 1, maximum: 10 },
   },

@@ -386,6 +386,45 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(!/hyro/i.test(suggested), 'and never the seed advertiser\'s own name');
   ok(await dash.locator('.discover-step button:has-text("Search the Ad Library")').count() === 1,
      'the search is a deliberate second click, never automatic');
+
+  // The seeded ad has never been watched, so these terms came from its caption.
+  // That is a much weaker answer than reading the video and it must not be able
+  // to pass itself off as the stronger one.
+  const provenance = (await dash.locator('.discover-step .note').allInnerTexts()).join(' ');
+  ok(/came from the ad copy, not the videos/.test(provenance),
+     'unwatched ads say their terms came from the copy');
+
+  await sw.evaluate(async () => {
+    await chrome.storage.local.set({
+      understanding_853222324181295: {
+        adId: '853222324181295',
+        v: 'understanding_v1',
+        product: { what: 'an electrolyte drink powder', category: 'drink mix',
+                   niche: 'sugar-free hydration for endurance athletes',
+                   brand_role: 'the advertiser sells it' },
+        audience: { who: 'cyclists', problem: 'cramping' },
+        claims: ['no sugar'],
+        format: { kind: 'demo', style: 'UGC', has_speech: true, on_screen_text: [] },
+        hook: { what_happens: 'hands tear a sachet', device: 'tight open' },
+        beats: [{ at: '0-3s', what: 'hands tear a sachet', purpose: 'hook' }],
+        production: { lighting: 'window light', framing: 'tight', stability: 'tripod',
+                      text_legibility: 'large', edit: 'clean', aspect: '9:16' },
+        discovery: { search_terms: ['electrolyte powder', 'sugar free sports drink'],
+                     adjacent_products: [], competitor_guesses: [] },
+        summary: 'A bench demo of an electrolyte powder.',
+      },
+    });
+  });
+  await dash.locator('.discover-step button:has-text("Suggest terms")').click();
+  await dash.waitForTimeout(700);
+  const watched = {
+    terms: await dash.locator('.discover-terms').inputValue(),
+    note: (await dash.locator('.discover-step .note').allInnerTexts()).join(' '),
+  };
+  ok(/electrolyte powder/.test(watched.terms),
+     `terms now describe the product, not the caption: ${watched.terms.split('\n').join(', ')}`);
+  ok(!/hydration works/.test(watched.terms), 'and the advertiser\'s own slogan is gone');
+  ok(/read off the videos/.test(watched.note), 'the UI says the terms came from the videos');
   await dash.locator('.pagetabs .ogui-segments__item:has-text("Library")').click();
   await dash.waitForTimeout(400);
 

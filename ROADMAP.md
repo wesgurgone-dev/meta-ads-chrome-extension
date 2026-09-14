@@ -21,11 +21,13 @@ ranked on term coverage, domain proximity, ad volume and median days running,
 with marketplaces and deals sites demoted and the reason shown. No scraper is
 paid for. `src/discover/`, and the Discover tab in the dashboard.
 
-**3. AI ad ranking - built.** Four anchored axes out of ten, scored by
-`claude-opus-5` through the proxy. Frames are captured at save time in an
-offscreen document, because a signed CDN link is dead by the time anyone clicks
-Score. Scores cache on (ad, rubric version) locally and in the team.
-`src/rank/`, `offscreen/`, and the Score panel in an ad's detail view.
+**3. AI ad ranking - built, on top of a record of what each ad is.** Saving an
+ad runs one vision pass (`claude-opus-5`) that watches its frames and writes
+down what the product is, its niche, the audience, the claims, the beats with
+timestamps, and observed production detail. Everything downstream reads that
+record instead of the pixels or the caption: scoring is a fast text call
+(`claude-sonnet-5`) against four anchored axes, and discovery takes its search
+terms from it. `src/understand/`, `src/rank/`, `offscreen/`.
 
 **4. Node canvas - built.** Reference ads as nodes with a free-text note on each
 saying what to take from it, wired into an output that writes a shot list and a
@@ -66,6 +68,11 @@ tables since it was last applied. It is idempotent; re-run the whole file.
 - **Scoring cost is unmeasured.** Use `messages.count_tokens` on representative
   frames before quoting a per-ad price; the old estimate predates thinking being
   on by default and the high-resolution vision tier.
+- **The extraction pass is unmeasured against real ads.** Every assertion about
+  it is structural - the prompt is frozen, the schema forbids judgements in the
+  production fields, brand terms are filtered. Whether the records it writes are
+  actually accurate needs a dozen real ads read by a person. The detail view's
+  "What the AI saw" disclosure exists for exactly that check.
 - **Check the rubric actually caches.** Scoring runs on `claude-sonnet-5`, whose
   minimum cacheable prefix is 1024 tokens against Opus 5's 512. The rubric is
   around 4,000 characters, which straddles that line, and falling under it fails

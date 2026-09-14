@@ -151,6 +151,95 @@ export const deriveTerms = (ads, { limit = 8 } = {}) => {
   }));
 };
 
+/**
+ * Terms from what the ads actually are, rather than from what they say.
+ *
+ * This is the path that should normally run. The lexical derivation above can
+ * only ever return the advertiser's own vocabulary, because that is all the
+ * copy contains - point it at "Hydration that works" and it returns "hydration"
+ * and "works", which finds this brand and nobody else. The extraction pass has
+ * already watched the video and written down what a *competitor* in the same
+ * niche would put in their own ads; this just counts those.
+ *
+ * A term earns its place by appearing across several different ads, exactly as
+ * in the lexical path: one ad's idea of its category is a guess, three ads
+ * agreeing is a niche.
+ */
+export const deriveTermsFromRecords = (records, { limit = 8, ads = [] } = {}) => {
+  const counts = new Map();
+  const seenNiche = new Map();
+  let used = 0;
+
+  // The prompt tells the model not to return brand names, and it mostly does
+  // not. Mostly is not good enough: one leaked brand term turns a niche sweep
+  // into a search for the advertiser you already have, and it looks like a
+  // working result. So the brands are filtered here as well, where it is a
+  // fact rather than an instruction.
+  const brands = new Set();
+  for (const ad of ads || []) {
+    for (const w of words(ad && ad.pageName)) brands.add(w);
+    for (const t of domainTokens(registrableDomain(ad && ad.linkUrl))) brands.add(t);
+  }
+  const isBrand = (term) =>
+    [...brands].some((b) => b.length > 2 && (term === b || term.includes(b)));
+
+  for (const record of records || []) {
+    if (!record || !record.discovery) continue;
+    used += 1;
+    const once = new Set();
+    for (const raw of record.discovery.search_terms || []) {
+      const term = String(raw || "").trim().toLowerCase();
+      // A single word finds an industry; a phrase finds a niche.
+      if (term.length < 4 || once.has(term) || isBrand(term)) continue;
+      once.add(term);
+      counts.set(term, (counts.get(term) || 0) + 1);
+    }
+    const niche = String((record.product && record.product.niche) || "").trim().toLowerCase();
+    if (niche) seenNiche.set(niche, (seenNiche.get(niche) || 0) + 1);
+  }
+
+  if (!counts.size) return { terms: [], source: "none", ads: used };
+
+  const scored = [...counts.entries()]
+    .map(([term, count]) => ({
+      term,
+      ads: count,
+      share: Number((count / Math.max(1, used)).toFixed(2)),
+      // Multi-word phrases are the useful ones, so they win a tie.
+      weight: count * (term.includes(" ") ? 1.6 : 1),
+    }))
+    .sort((a, b) => b.weight - a.weight || a.term.localeCompare(b.term));
+
+  const chosen = [];
+  for (const entry of scored) {
+    if (chosen.length >= limit) break;
+    // Two terms where one contains the other spend two searches on one idea.
+    if (chosen.some((c) => c.term.includes(entry.term) || entry.term.includes(c.term))) continue;
+    chosen.push(entry);
+  }
+
+  return {
+    terms: chosen.map(({ term, ads, share }) => ({ term, ads, share })),
+    source: "watched",
+    ads: used,
+    niches: [...seenNiche.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n),
+  };
+};
+
+/**
+ * The terms to search, from the best source available.
+ *
+ * Records when there are any, the ad copy when there are not - and it says
+ * which, because "we read the videos" and "we counted words in the captions"
+ * are very different answers and the second one should not be able to pass
+ * itself off as the first.
+ */
+export const bestTerms = (ads, records, { limit = 8 } = {}) => {
+  const watched = deriveTermsFromRecords(records, { limit, ads });
+  if (watched.terms.length) return watched;
+  return { terms: deriveTerms(ads, { limit }), source: "copy", ads: (ads || []).length, niches: [] };
+};
+
 /** The Ad Library URL a term is searched at. */
 export const searchUrl = (term, { country = "ALL", activeOnly = true } = {}) => {
   const params = new URLSearchParams({
