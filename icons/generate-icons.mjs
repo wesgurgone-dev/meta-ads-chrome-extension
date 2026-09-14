@@ -1,5 +1,12 @@
-// Generates the extension icons without any image library:
-// dark rounded square, blue-to-teal gradient triangle (the "Ads Saver" mark).
+// Generates the extension icons without any image library: a stack of three
+// cards, receding to the left, on a transparent background - a swipe file.
+//
+// The reference for this mark was white cards on black. On a transparent
+// background a white front card disappears against a light Chrome toolbar, so
+// the stack is drawn in the brand blue instead: the front card solid, the two
+// behind it progressively more transparent. Same silhouette, legible on any
+// backdrop.
+//
 // Run: node generate-icons.mjs
 import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
@@ -7,6 +14,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+// --- PNG encoding ---------------------------------------------------------
 
 const crcTable = (() => {
   const t = new Uint32Array(256);
@@ -60,42 +69,55 @@ const png = (size, pixelFn) => {
   ]);
 };
 
-const lerp = (a, b, t) => a + (b - a) * t;
+// --- The mark -------------------------------------------------------------
+
+const BLUE = [42, 120, 214]; // #2a78d6, the extension's accent
+
+// Back to front. Coordinates are fractions of the canvas.
+const CARDS = [
+  { x0: 0.08, y0: 0.3, x1: 0.44, y1: 0.7, r: 0.05, alpha: 0.26 },
+  { x0: 0.26, y0: 0.22, x1: 0.66, y1: 0.78, r: 0.055, alpha: 0.5 },
+  { x0: 0.46, y0: 0.12, x1: 0.92, y1: 0.88, r: 0.07, alpha: 1 },
+];
+
+/** Signed distance to a rounded rectangle; negative inside. */
+const roundedRectSDF = (px, py, card) => {
+  const cx = (card.x0 + card.x1) / 2;
+  const cy = (card.y0 + card.y1) / 2;
+  const hx = (card.x1 - card.x0) / 2 - card.r;
+  const hy = (card.y1 - card.y0) / 2 - card.r;
+  const dx = Math.abs(px - cx) - hx;
+  const dy = Math.abs(py - cy) - hy;
+  const ox = Math.max(dx, 0);
+  const oy = Math.max(dy, 0);
+  return Math.hypot(ox, oy) + Math.min(Math.max(dx, dy), 0) - card.r;
+};
 
 const draw = (x, y, size) => {
   const u = (x + 0.5) / size;
   const v = (y + 0.5) / size;
+  const edge = 1 / size; // one pixel, for anti-aliasing
 
-  // Rounded-square alpha mask.
-  const r = 0.22;
-  const cx = Math.min(Math.max(u, r), 1 - r);
-  const cy = Math.min(Math.max(v, r), 1 - r);
-  const d = Math.hypot(u - cx, v - cy);
-  const edge = 1.5 / size;
-  const alpha = Math.max(0, Math.min(1, (r - d) / edge + 0.5));
-  if (alpha <= 0) return [0, 0, 0, 0];
+  // Composite back to front, source-over, over a transparent canvas.
+  let R = 0;
+  let G = 0;
+  let B = 0;
+  let A = 0;
 
-  // Background: near-black navy.
-  let R = 16,
-    G = 18,
-    B = 26;
-
-  // Upward triangle mark, slightly wider than tall.
-  const ty = 0.76; // baseline
-  const th = 0.52; // height
-  const apexY = ty - th;
-  if (v <= ty && v >= apexY) {
-    const t = (v - apexY) / th; // 0 at apex, 1 at base
-    const halfWidth = 0.3 * t + 0.015;
-    if (Math.abs(u - 0.5) <= halfWidth) {
-      // Vertical gradient: Meta blue up top to teal-green at the base.
-      R = Math.round(lerp(45, 49, t));
-      G = Math.round(lerp(136, 190, t));
-      B = Math.round(lerp(255, 130, t));
-    }
+  for (const card of CARDS) {
+    const d = roundedRectSDF(u, v, card);
+    const coverage = Math.min(Math.max(0.5 - d / edge, 0), 1);
+    if (coverage <= 0) continue;
+    const sa = coverage * card.alpha;
+    const outA = sa + A * (1 - sa);
+    if (outA <= 0) continue;
+    R = (BLUE[0] * sa + R * A * (1 - sa)) / outA;
+    G = (BLUE[1] * sa + G * A * (1 - sa)) / outA;
+    B = (BLUE[2] * sa + B * A * (1 - sa)) / outA;
+    A = outA;
   }
 
-  return [R, G, B, Math.round(alpha * 255)];
+  return [Math.round(R), Math.round(G), Math.round(B), Math.round(A * 255)];
 };
 
 for (const size of [16, 32, 48, 128]) {

@@ -655,6 +655,13 @@
       </nav>
       <div class="mal-main">
         <header class="mal-head">
+          <span class="mal-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <rect x="1" y="7" width="8.5" height="10" rx="2" fill="currentColor" opacity=".26"/>
+              <rect x="6" y="5" width="9.5" height="14" rx="2.2" fill="currentColor" opacity=".5"/>
+              <rect x="12" y="3" width="11" height="18" rx="2.6" fill="currentColor"/>
+            </svg>
+          </span>
           <div>
             <div class="mal-head-title">Ads Saver</div>
             <div class="mal-head-sub" id="mal-head-sub"></div>

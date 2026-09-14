@@ -22,7 +22,7 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 2. **Load unpacked** and select this `meta-ads-extension/` folder.
 3. Browse `facebook.com/ads/library`, scroll some results, and hit **Save** on any ad.
 
-No build step; plain MV3 JavaScript. Icons are checked in; regenerate with `node icons/generate-icons.mjs`. Run the unit tests with `node tests/metrics.test.cjs`.
+No build step; plain MV3 JavaScript. Icons are checked in; regenerate with `node icons/generate-icons.mjs`. The mark is a stack of three cards, a swipe file: the front card solid in the accent blue, the two behind it progressively more transparent, on a transparent background. The reference was white cards on black, but a white front card disappears against a light Chrome toolbar, so the stack is tinted instead of inverted. Type is Helvetica throughout, weights 400/500/700 only (Helvetica has no real 600, so it would synthesise), with negative tracking on display text and reduced tracking on uppercase micro-labels. Run the unit tests with `node tests/metrics.test.cjs`.
 
 ## Teams: how sharing actually works
 
