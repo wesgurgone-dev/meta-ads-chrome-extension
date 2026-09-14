@@ -442,6 +442,25 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
      `schema missing is named, with the fix: ${rows[2]}`);
   ok(/Signed in sign in below/.test(rows[3] || ''), `signed out: ${rows[3]}`);
 
+  console.log('--- sending creative off the device is a visible choice ---');
+  // The settings modal is already open from the block above.
+  const settings = await dash.evaluate(() => {
+    const rows = [...document.querySelectorAll('.toggle-row')];
+    const frames = rows.find((r) => /Capture video frames/.test(r.innerText));
+    return {
+      rows: rows.length,
+      found: !!frames,
+      on: frames ? frames.querySelector('input').checked : null,
+      says: frames ? frames.innerText.replace(/\s+/g, ' ') : '',
+    };
+  });
+  ok(settings.found, 'frame capture is a setting, not a silent default');
+  ok(settings.on === true, 'on by default, because scoring is useless without it');
+  ok(/signed and stop working within hours/.test(settings.says),
+     'and it says why it cannot wait until you click Score');
+  ok(/forwards them to Anthropic/.test(settings.says),
+     'and where the frames go, which is the part worth being explicit about');
+
   console.log('--- the extension ships no privileged credential ---');
   const secrets = await sw.evaluate(async () => {
     const get = async (f) => (await (await fetch(chrome.runtime.getURL(f))).text());

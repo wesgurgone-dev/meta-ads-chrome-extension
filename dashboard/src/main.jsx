@@ -377,8 +377,10 @@ const ScorePanel = ({ ad, teamId }) => {
         <>
           <p className="note">
             Scores four axes out of ten from the frames captured when this ad was
-            saved: hook, utility, succinctness and production. It costs a call to
-            the model, so the result is cached and shared with your team.
+            saved: hook, utility, succinctness and production. Those frames and
+            this ad's copy are sent to the proxy, which forwards them to
+            Anthropic. It costs a call to the model, so the result is cached and
+            shared with your team.
           </p>
           <Button size="sm" disabled={busy} onClick={() => run(false)}>
             {busy ? "Scoring..." : "Score this ad"}
@@ -904,6 +906,28 @@ const SettingsModal = ({ state, onClose, onDone }) => {
             onDone();
           }}
           aria-label="Sync across devices"
+        />
+      </div>
+
+      <div className="toggle-row">
+        <div className="toggle-text">
+          <div><strong>Capture video frames when saving</strong></div>
+          <div className="toggle-sub">
+            Needed to score an ad, and it has to happen at save time because
+            Meta's video links are signed and stop working within hours. It costs
+            background bandwidth on every saved video ad. Frames stay on this
+            device until you score something; scoring sends them to the proxy,
+            which forwards them to Anthropic.
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={state.settings.captureFrames !== false}
+          onChange={async (e) => {
+            await send({ type: "SET_CAPTURE_FRAMES", enabled: e.target.checked });
+            onDone();
+          }}
+          aria-label="Capture video frames when saving"
         />
       </div>
 

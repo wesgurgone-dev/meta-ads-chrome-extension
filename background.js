@@ -6,7 +6,7 @@
  *             kind is 'personal' or 'team'; team spaces carry a join code.
  *   lists:    { [listId]: { id, spaceId, name, color, adIds[], createdAt } }
  *   ads:      { [adId]: normalizedAd & { savedAt, savedBy, thumbDataUrl? } }
- *   settings: { activeSpaceId, syncEnabled }
+ *   settings: { activeSpaceId, syncEnabled, captureFrames }
  *   identity: { userId, displayName }
  *   frames_<adId>: { v, adId, source, duration, frames[{t, dataUrl}], error? }
  *   frameQueue: [{ adId, url, source }] - pending video frame extractions
@@ -389,7 +389,7 @@ const handleSetDefaultList = async (listId) => {
 
 const handleSaveAds = async (incoming, listId) => {
   const store = await ensureBootstrapped();
-  const { ads, lists, identity } = store;
+  const { ads, lists, identity, settings } = store;
   const target = resolveTargetList(store, listId);
   if (!target) return { ok: false, error: "no_list" };
 
@@ -452,8 +452,10 @@ const handleSaveAds = async (incoming, listId) => {
   })();
 
   // Frames are the same class of work as thumbnails - best effort, after the
-  // response, and only for video ads.
-  if (toFrames.length) enqueueFrames(toFrames);
+  // response, and only for video ads. It is real background traffic on every
+  // saved video, so it is a setting rather than a silent default; an explicit
+  // Score still captures on demand.
+  if (toFrames.length && settings.captureFrames !== false) enqueueFrames(toFrames);
 
   return { ok: true, added, listId: target.id, listName: target.name };
 };
@@ -1247,6 +1249,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return respond(handleSetTheme(msg.theme));
     case "SET_DOWNLOAD_FOLDER":
       return respond(handleSetDownloadFolder(msg.mode));
+    case "SET_CAPTURE_FRAMES":
+      return respond(
+        getStore().then(async ({ settings }) => {
+          settings.captureFrames = !!msg.enabled;
+          await chrome.storage.local.set({ settings });
+          return { ok: true };
+        }),
+      );
     case "SET_DEFAULT_LIST":
       return respond(handleSetDefaultList(msg.listId));
     case "SPACE_OP":
