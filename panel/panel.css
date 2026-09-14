@@ -1,32 +1,12 @@
 /**
- * Side panel: Apple-style minimal UI on a mesh-gradient ground.
+ * Side panel layout.
  *
- * The ground is the brand ramp (#070707 -> #4510e8 -> #ed0cdd -> #ffc41d ->
- * #ffffff) pulled apart into overlapping blurred blobs, then covered by a
- * scrim. The scrim is what makes the rest possible: glass needs something with
- * contrast behind it, and a full-strength ramp under white text is unreadable.
- *
- * Every surface above the ground is one material: translucent, blurred,
- * saturated, with a bright top edge where light catches it. Nothing is opaque,
- * and nothing stacks glass on glass, which is where legibility collapses.
+ * Material, controls and refraction all come from OpenGlass UI; this file is
+ * the panel's own geometry and the dot-grid ground, nothing else. Anything
+ * that looks like colour here is a token the library reads.
  */
 
 :root {
-  /* The brand ramp, verbatim. Everything else is derived from it. */
-  --ink: #070707;
-  --violet: #4510e8;
-  --magenta: #ed0cdd;
-  --amber: #ffc41d;
-  --paper: #ffffff;
-
-  /* SF Pro where it exists (macOS ships it; it is not ours to redistribute),
-     then the closest widely available faces. */
-  --font:
-    "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
-    "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
-
-  /* OpenGlass UI reads these; the material and all forty recipes derive from
-     them, so the brand palette goes in here rather than into each rule. */
   --ogui-color-text: rgba(255, 255, 255, 0.96);
   --ogui-color-muted: rgba(255, 255, 255, 0.66);
   --ogui-color-accent: #4510e8;
@@ -35,37 +15,25 @@
   --ogui-radius-surface: 18px;
   --ogui-radius-control: 12px;
 
-  --text: var(--ogui-material-text, rgba(255, 255, 255, 0.96));
-  --text-dim: var(--ogui-material-muted, rgba(255, 255, 255, 0.76));
-  --text-faint: rgba(255, 255, 255, 0.6);
-  --edge: var(--ogui-material-border, rgba(255, 255, 255, 0.16));
-  --edge-bright: var(--ogui-material-highlight, rgba(255, 255, 255, 0.34));
+  --plane: #0d0b13;
+  --dot: rgba(255, 255, 255, 0.08);
 
-  --r-lg: 24px;
-  --r-md: 18px;
-  --r-sm: 13px;
+  --font:
+    "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
 
-  --scrim: linear-gradient(
-    180deg,
-    rgba(7, 7, 7, 0.84) 0%,
-    rgba(7, 7, 7, 0.66) 45%,
-    rgba(7, 7, 7, 0.82) 100%
-  );
+  --text: var(--ogui-color-text);
+  --text-dim: var(--ogui-color-muted);
+  --text-faint: rgba(255, 255, 255, 0.46);
 }
 
-/* Light keeps the same ramp and lets the pale end of it carry the panel. */
 :root[data-theme="light"] {
-  /* Dark type on pale glass needs no shadow; it only muddies it. */
   --ogui-color-text: rgba(10, 6, 20, 0.94);
-  --ogui-color-muted: rgba(10, 6, 20, 0.62);
+  --ogui-color-muted: rgba(10, 6, 20, 0.66);
   --ogui-color-focus: rgba(69, 16, 232, 0.9);
-  --text-faint: rgba(10, 6, 20, 0.54);
-  --scrim: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.8) 0%,
-    rgba(255, 255, 255, 0.66) 45%,
-    rgba(255, 255, 255, 0.76) 100%
-  );
+  --plane: #f2f0f6;
+  --dot: rgba(17, 12, 30, 0.1);
+  --text-faint: rgba(10, 6, 20, 0.48);
 }
 
 * {
@@ -73,7 +41,8 @@
 }
 
 html,
-body {
+body,
+#root {
   height: 100%;
 }
 
@@ -84,113 +53,16 @@ body {
   line-height: 1.45;
   letter-spacing: -0.01em;
   color: var(--text);
-  background: var(--ink);
   -webkit-font-smoothing: antialiased;
-  text-shadow: 0 1px 2px rgba(7, 7, 7, 0.22);
   overflow: hidden;
+  /* The micro dot texture: a 1px dot on a 14px grid over the panel plane. */
+  background-color: var(--plane);
+  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+  background-size: 14px 14px;
+  background-position: -1px -1px;
 }
-
-/* ---------- the ground ---------- */
-
-.mesh,
-.mesh-scrim {
-  position: fixed;
-  z-index: 0;
-  pointer-events: none;
-}
-
-/* Oversized and blurred: the blobs must bleed past every edge or the blur
-   leaves a pale rim where the element stops. */
-.mesh {
-  inset: -25%;
-  background-color: var(--ink);
-  background-image:
-    radial-gradient(
-      26% 22% at 76% 14%,
-      rgba(69, 16, 232, 0.95) 0%,
-      rgba(69, 16, 232, 0) 100%
-    ),
-    radial-gradient(
-      30% 26% at 16% 44%,
-      rgba(69, 16, 232, 0.7) 0%,
-      rgba(69, 16, 232, 0) 100%
-    ),
-    radial-gradient(
-      28% 22% at 84% 60%,
-      rgba(237, 12, 221, 0.8) 0%,
-      rgba(237, 12, 221, 0) 100%
-    ),
-    radial-gradient(
-      24% 18% at 28% 76%,
-      rgba(237, 12, 221, 0.5) 0%,
-      rgba(237, 12, 221, 0) 100%
-    ),
-    radial-gradient(
-      26% 18% at 68% 88%,
-      rgba(255, 196, 29, 0.72) 0%,
-      rgba(255, 196, 29, 0) 100%
-    ),
-    radial-gradient(
-      22% 14% at 40% 98%,
-      rgba(255, 255, 255, 0.85) 0%,
-      rgba(255, 255, 255, 0) 100%
-    ),
-    /* The ramp itself, in order, under the mesh that breaks it up. */
-      linear-gradient(
-        168deg,
-        #070707 0%,
-        #4510e8 50%,
-        #ed0cdd 71%,
-        #ffc41d 86%,
-        #ffffff 100%
-      );
-  filter: blur(60px) saturate(125%);
-}
-
-.mesh-scrim {
-  inset: 0;
-  background: var(--scrim);
-}
-
-/**
- * Grain, over the scrim and under everything else.
- *
- * A perfectly smooth gradient and a blurred glass surface meet at a hard,
- * obviously-synthetic line. A little noise on both sides of that line hides
- * the banding the gradient would otherwise show at this size, and gives the
- * blur something to actually blur, so the glass reads as a material sitting on
- * a surface rather than a lighter rectangle drawn on top of one.
- *
- * feTurbulence rendered to a data URI: no asset to ship, no request to make.
- */
-.mesh-scrim::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
-  opacity: 0.16;
-  mix-blend-mode: overlay;
-  pointer-events: none;
-}
-
-:root[data-theme="light"] .mesh-scrim::after {
-  opacity: 0.1;
-}
-
-/* Grain is texture, and texture is exactly what reduced-transparency asks to
-   be rid of. */
-@media (prefers-reduced-transparency: reduce) {
-  .mesh-scrim::after {
-    display: none;
-  }
-}
-
-/* ---------- shell ---------- */
 
 #app {
-  position: relative;
-  z-index: 1;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -198,29 +70,51 @@ body {
   gap: 12px;
 }
 
-/* Shape and clipping only. Colour, blur, border, shadow and the specular edge
-   all come from [data-ogui-glass] in vendor/open-glass-ui/material.css. */
-.bubble {
+/* ---------- refraction layering ----------
+
+   The lens is an empty Glass layer carrying the SVG displacement filter;
+   content is a sibling stacked above it. Chromium applies an SVG filter to the
+   element itself rather than to its backdrop, so anything inside a refracting
+   element is displaced with it. Keeping the two apart lets the glass bend the
+   page behind without bending the text on top. */
+
+/* No isolation here: backdrop-filter samples the backdrop of its own stacking
+   context, so isolating the wrapper leaves the lens with nothing behind it to
+   refract and it renders as a flat grey slab. */
+.surface {
+  position: relative;
   border-radius: var(--ogui-radius-surface);
-  overflow: hidden;
 }
 
+.surface-lens {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.surface-content {
+  position: relative;
+  z-index: 1;
+}
 
 /* ---------- header ---------- */
 
 .head {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 12px 14px;
-  border-radius: var(--r-lg);
   flex: 0 0 auto;
+  padding: 12px 14px;
+}
+
+.head .surface-content {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 11px;
 }
 
 .mark {
   width: 30px;
   height: 30px;
-  flex: 0 0 auto;
 }
 
 .head-title {
@@ -233,32 +127,47 @@ body {
 .head-sub {
   font-size: 12px;
   color: var(--text-dim);
-  letter-spacing: -0.004em;
 }
 
-.head-spacer {
-  flex: 1;
+.space-seg {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
 }
 
-/* ---------- navigation ---------- */
+/* ---------- segmented controls ---------- */
 
-#tabs {
+.space-seg,
+.nav-seg,
+.view .ogui-segments {
   display: flex;
   width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px;
+  border: 0;
+}
+
+.nav-seg {
   flex: 0 0 auto;
 }
 
-#tabs .ogui-segments__item {
+.space-seg .ogui-segments__item,
+.nav-seg .ogui-segments__item,
+.view .ogui-segments .ogui-segments__item {
   flex: 1;
-  flex-direction: column;
+  min-width: 0;
   justify-content: center;
+  font-size: 12px;
+}
+
+.nav-seg .ogui-segments__item {
+  flex-direction: column;
   gap: 4px;
+  padding: 8px 4px;
   font-size: 11.5px;
 }
 
-#tabs svg {
-  width: 17px;
-  height: 17px;
+.nav-seg svg {
   fill: currentColor;
 }
 
@@ -273,31 +182,21 @@ body {
   flex-direction: column;
   gap: 11px;
   padding-bottom: 4px;
-  /* Scroll edge effect rather than a hard divider under the tabs. */
-  mask-image: linear-gradient(
-    180deg,
-    transparent 0,
-    #000 14px,
-    #000 calc(100% - 10px),
-    transparent 100%
-  );
+}
+
+.view > * {
+  flex: 0 0 auto;
 }
 
 .view::-webkit-scrollbar {
   width: 0;
 }
 
-/* The view is a scrolling flex column, and flex children shrink by default.
-   With a few saved ads in it that squeezed cards below their own text until
-   lines vanished. Everything in here sizes to its content and the column
-   scrolls instead. */
-.view > * {
-  flex: 0 0 auto;
-}
-
 .card {
   padding: 15px 16px;
-  border-radius: var(--r-lg);
+}
+
+.card .surface-content {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -313,12 +212,18 @@ body {
 .card-sub {
   font-size: 12.5px;
   color: var(--text-dim);
-  letter-spacing: -0.004em;
 }
 
-/* Both of these used to sit straight on the mesh. A thin strip of the same
-   material carries them instead, so they stay legible wherever the ramp is
-   vivid without darkening the ground to compensate. */
+/* Section labels and empty states carry their own strip of material so they
+   stay legible over whatever the ground is. */
+.section,
+.empty {
+  border-radius: 10px;
+  background: var(--ogui-material-background, rgba(255, 255, 255, 0.08));
+  backdrop-filter: var(--ogui-material-filter, blur(12px));
+  -webkit-backdrop-filter: var(--ogui-material-filter, blur(12px));
+}
+
 .section {
   align-self: flex-start;
   font-size: 10.5px;
@@ -327,76 +232,51 @@ body {
   text-transform: uppercase;
   color: var(--text-dim);
   padding: 5px 10px;
-  border-radius: 8px;
-  background: var(--ogui-material-background);
-  backdrop-filter: var(--ogui-material-filter);
-  -webkit-backdrop-filter: var(--ogui-material-filter);
 }
 
 .empty {
   font-size: 12.5px;
   color: var(--text-dim);
   padding: 12px 14px;
-  border-radius: var(--r-sm);
-  background: var(--ogui-material-background);
-  backdrop-filter: var(--ogui-material-filter);
-  -webkit-backdrop-filter: var(--ogui-material-filter);
-  border: 1px solid var(--ogui-material-border);
 }
-
-/* ---------- buttons ---------- */
 
 .btn-full {
   width: 100%;
   margin-top: 8px;
 }
 
-.ogui-button[hidden] {
-  display: none;
-}
-
 /* ---------- stats ---------- */
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 7px;
 }
 
-.stat {
-  padding: 11px 6px;
-  border-radius: var(--r-sm);
+.stats .surface {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.stats .ogui-stat {
+  padding: 10px 6px;
+  border: 0;
+  background: none;
+  box-shadow: none;
   text-align: center;
-}
-
-.stat-value {
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.028em;
-  line-height: 1.1;
-}
-
-.stat-label {
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin-top: 2px;
+  min-width: 0;
 }
 
 /* ---------- ad cards ---------- */
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
 }
 
 .mini {
-  border-radius: var(--r-md);
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
 }
 
 .mini-media {
@@ -434,8 +314,6 @@ body {
   padding: 3px 6px;
   border-radius: 6px;
   background: rgba(7, 7, 7, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   color: #fff;
 }
 
@@ -446,7 +324,6 @@ body {
 
 .mini-ended {
   left: 7px;
-  background: rgba(7, 7, 7, 0.62);
 }
 
 .mini-fmt {
@@ -479,7 +356,6 @@ body {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  margin-top: 1px;
 }
 
 .mini-chip {
@@ -501,9 +377,6 @@ body {
 }
 
 .mini-btn {
-  height: 30px;
-  font-size: 12px;
-  border-radius: 9px;
   width: 100%;
   margin-top: 6px;
 }
@@ -511,22 +384,16 @@ body {
 /* ---------- list rows ---------- */
 
 .row {
+  cursor: pointer;
+}
+
+.row .surface-content {
   display: flex;
   align-items: center;
   gap: 9px;
-  width: 100%;
   padding: 11px 13px;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  text-align: left;
-  font: 500 13px/1.2 var(--font);
-  letter-spacing: -0.01em;
-  color: var(--text);
-  transition: transform 110ms ease-out;
-}
-
-.row:active {
-  transform: scale(0.99);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .row-name {
@@ -550,19 +417,14 @@ body {
   color: var(--text-dim);
 }
 
-.is-default {
-  background: var(--ogui-material-background);
-}
-
 select.field {
   width: 100%;
   appearance: none;
   font: 500 13px/1 var(--font);
-  letter-spacing: -0.01em;
   color: var(--text);
-  background: var(--ogui-material-background);
-  border: 1px solid var(--edge);
-  border-radius: var(--r-sm);
+  background: var(--ogui-material-background, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--ogui-material-border, rgba(255, 255, 255, 0.2));
+  border-radius: var(--ogui-radius-control);
   padding: 11px 13px;
   cursor: pointer;
 }
@@ -576,7 +438,6 @@ select.field option {
   font-size: 19px;
   font-weight: 600;
   letter-spacing: 0.1em;
-  padding: 3px 0;
 }
 
 /* ---------- footer ---------- */
@@ -589,9 +450,8 @@ select.field option {
   padding: 10px 0 14px;
 }
 
-.foot .btn {
+.foot .ogui-button {
   width: 100%;
-  margin: 0;
 }
 
 /* ---------- toast ---------- */
@@ -602,106 +462,17 @@ select.field option {
   right: 14px;
   bottom: 14px;
   z-index: 5;
+}
+
+.toast .surface-content {
   padding: 12px 15px;
-  border-radius: var(--r-md);
   font-size: 13px;
   font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  background: var(--ogui-material-background);
-  backdrop-filter: var(--ogui-material-filter);
-  -webkit-backdrop-filter: var(--ogui-material-filter);
-  border: 1px solid var(--edge);
-  box-shadow:
-    inset 0 1px 0 var(--edge-bright),
-    0 12px 32px rgba(0, 0, 0, 0.4);
-  /* Materialize rather than fade: blur and scale arrive together. */
-  opacity: 0;
-  transform: translateY(10px) scale(0.97);
-  transition:
-    opacity 240ms cubic-bezier(0.32, 0.72, 0, 1),
-    transform 240ms cubic-bezier(0.32, 0.72, 0, 1);
-  pointer-events: none;
-}
-
-.toast.show {
-  opacity: 1;
-  transform: none;
-}
-
-/* ---------- accessibility ---------- */
-
-@media (prefers-reduced-transparency: reduce) {
-  .bubble,
-  .btn,
-  .toast {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    background: rgba(20, 18, 30, 0.94);
-  }
-  :root[data-theme="light"] .bubble,
-  :root[data-theme="light"] .btn,
-  :root[data-theme="light"] .toast {
-    background: rgba(255, 255, 255, 0.96);
-  }
-  .mesh {
-    filter: none;
-  }
-}
-
-@media (prefers-contrast: more) {
-  :root {
-    --edge: rgba(255, 255, 255, 0.55);
-    --text-dim: rgba(255, 255, 255, 0.82);
-    --text-faint: rgba(255, 255, 255, 0.68);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast {
-    transition: opacity 160ms ease;
-    transform: none;
-  }
-  .ogui-button:active:not(:disabled),
-  .ogui-segments__item:active,
-  .row:active {
-    transform: none;
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
-
-:root[data-theme="light"] body {
-  text-shadow: none;
-}
-
-/* ---------- focus ---------- */
-
-:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
-  outline-offset: 2px;
-  border-radius: 11px;
-}
-
-:root[data-theme="light"] :focus-visible {
-  outline-color: rgba(69, 16, 232, 0.85);
-}
-
-/* ---------- space switch, in the header bubble ---------- */
-
-.head {
-  flex-wrap: wrap;
-}
-
-#space-seg,
-#view .ogui-segments {
-  display: flex;
-  width: 100%;
-}
-
-#space-seg .ogui-segments__item,
-#view .ogui-segments .ogui-segments__item {
-  flex: 1;
-  justify-content: center;
-  min-width: 0;
-  font-size: 12px;
-}
-

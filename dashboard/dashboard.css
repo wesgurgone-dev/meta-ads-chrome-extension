@@ -1,32 +1,13 @@
 /**
- * Dashboard, on the same ground as the side panel: the brand ramp
- * (#070707 -> #4510e8 -> #ed0cdd -> #ffc41d -> #ffffff) pulled into blurred
- * mesh blobs, covered by a scrim, with every surface above it made of one
- * translucent material. The dot texture is gone; a mesh ground and a dot grid
- * fight each other, and the ground is the stronger idea.
+ * Dashboard, on the same ground as the side panel: a micro dot grid, with
+ * every surface above it made of one translucent OpenGlass UI material.
  *
  * Tokens only below this block: both themes swap here and the whole page
  * follows.
  */
 
 :root {
-  --ramp: linear-gradient(
-    168deg,
-    #070707 0%,
-    #4510e8 50%,
-    #ed0cdd 71%,
-    #ffc41d 86%,
-    #ffffff 100%
-  );
-  --scrim: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.8) 0%,
-    rgba(255, 255, 255, 0.66) 45%,
-    rgba(255, 255, 255, 0.76) 100%
-  );
 
-  --plane: transparent;
-  --dot: transparent;
   /* Surfaces come from OpenGlass UI's material; these are the mappings onto
      it, so the dashboard and the side panel are made of the same glass. */
   --ogui-color-text: rgba(10, 6, 20, 0.94);
@@ -36,6 +17,8 @@
   --ogui-radius-surface: 18px;
   --ogui-radius-control: 12px;
 
+  --plane: #f2f0f6;
+  --dot: rgba(17, 12, 30, 0.1);
   --panel: var(--ogui-material-background);
   --panel-2: rgba(255, 255, 255, 0.14);
   --border: var(--ogui-material-border);
@@ -68,16 +51,10 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
   color-scheme: dark;
-  --scrim: linear-gradient(
-    180deg,
-    rgba(7, 7, 7, 0.84) 0%,
-    rgba(7, 7, 7, 0.66) 45%,
-    rgba(7, 7, 7, 0.82) 100%
-  );
-  --plane: transparent;
-  --dot: transparent;
   --ogui-color-text: rgba(255, 255, 255, 0.96);
   --ogui-color-muted: rgba(255, 255, 255, 0.66);
+  --plane: #0d0b13;
+  --dot: rgba(255, 255, 255, 0.08);
   --panel: var(--ogui-material-background);
   --panel-2: rgba(255, 255, 255, 0.03);
   --border: var(--ogui-material-border);
@@ -99,16 +76,10 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --scrim: linear-gradient(
-    180deg,
-    rgba(7, 7, 7, 0.84) 0%,
-    rgba(7, 7, 7, 0.66) 45%,
-    rgba(7, 7, 7, 0.82) 100%
-  );
-  --plane: transparent;
-  --dot: transparent;
   --ogui-color-text: rgba(255, 255, 255, 0.96);
   --ogui-color-muted: rgba(255, 255, 255, 0.66);
+  --plane: #0d0b13;
+  --dot: rgba(255, 255, 255, 0.08);
   --panel: var(--ogui-material-background);
   --panel-2: rgba(255, 255, 255, 0.03);
   --border: var(--ogui-material-border);
@@ -174,66 +145,13 @@ body {
   font: 400 14px/1.5 var(--font);
   letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
-  background: #070707;
-  isolation: isolate;
+  /* The micro dot texture: a 1px dot on a 14px grid over the page plane. */
+  background-color: var(--plane);
+  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+  background-size: 14px 14px;
+  background-position: -1px -1px;
 }
 
-/* The mesh ground, behind everything. Oversized and blurred so the blobs
-   bleed past every edge instead of leaving a pale rim at the viewport. */
-body::before,
-body::after {
-  content: "";
-  position: fixed;
-  z-index: -2;
-  pointer-events: none;
-}
-
-body::before {
-  inset: -25%;
-  background-color: #070707;
-  background-image:
-    radial-gradient(
-      26% 22% at 76% 14%,
-      rgba(69, 16, 232, 0.95) 0%,
-      rgba(69, 16, 232, 0) 100%
-    ),
-    radial-gradient(
-      30% 26% at 16% 44%,
-      rgba(69, 16, 232, 0.7) 0%,
-      rgba(69, 16, 232, 0) 100%
-    ),
-    radial-gradient(
-      28% 22% at 84% 60%,
-      rgba(237, 12, 221, 0.8) 0%,
-      rgba(237, 12, 221, 0) 100%
-    ),
-    radial-gradient(
-      24% 18% at 28% 76%,
-      rgba(237, 12, 221, 0.5) 0%,
-      rgba(237, 12, 221, 0) 100%
-    ),
-    radial-gradient(
-      26% 18% at 68% 88%,
-      rgba(255, 196, 29, 0.72) 0%,
-      rgba(255, 196, 29, 0) 100%
-    ),
-    radial-gradient(
-      22% 14% at 40% 98%,
-      rgba(255, 255, 255, 0.85) 0%,
-      rgba(255, 255, 255, 0) 100%
-    ),
-    var(--ramp);
-  filter: blur(60px) saturate(125%);
-}
-
-body::after {
-  inset: 0;
-  z-index: -1;
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.34'/%3E%3C/svg%3E")
-      0 0 / 180px 180px,
-    var(--scrim);
-}
 
 a {
   color: var(--blue);
@@ -1213,9 +1131,6 @@ h2,
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  body::before {
-    filter: none;
-  }
   #sidebar,
   #topbar,
   .stats > *,
@@ -1295,8 +1210,3 @@ h2,
   transform: rotate(-45deg) translate(1px, -1px);
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  body::after {
-    background-image: none;
-  }
-}

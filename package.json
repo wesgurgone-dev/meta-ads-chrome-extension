@@ -1,0 +1,18 @@
+{
+  "name": "meta-ads-chrome-extension",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Capture ads from the Meta Ad Library, save them into lists, and download creatives.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tests/metrics.test.cjs"
+  },
+  "dependencies": {
+    "open-glass-ui": "0.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

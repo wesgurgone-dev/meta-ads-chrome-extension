@@ -4,63 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ads Saver</title>
-    <!-- OpenGlass UI: the recipe stylesheet once, then the material. Both are
-         vendored because MV3 forbids remote code and this extension has no
-         bundler. panel.css comes last and only adds layout. -->
-    <link rel="stylesheet" href="../vendor/open-glass-ui/styles.css" />
-    <link rel="stylesheet" href="../vendor/open-glass-ui/material.css" />
+    <!-- Bundled: React, OpenGlass UI and its stylesheet. panel.css is layout
+         only and comes last. Nothing is fetched at runtime. -->
+    <link rel="stylesheet" href="panel.bundle.css" />
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
-    <div class="mesh" aria-hidden="true"></div>
-    <div class="mesh-scrim" aria-hidden="true"></div>
-
-    <div id="app">
-      <header class="bubble head" data-ogui-glass data-ogui-material="regular">
-        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
-          <defs>
-            <linearGradient id="markGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#4510e8" />
-              <stop offset="0.55" stop-color="#ed0cdd" />
-              <stop offset="1" stop-color="#ffc41d" />
-            </linearGradient>
-          </defs>
-          <rect x="1" y="7" width="8.5" height="10" rx="2.4" fill="#9b8cf2" opacity=".5" />
-          <rect x="6" y="5" width="9.5" height="14" rx="2.8" fill="#9b8cf2" opacity=".8" />
-          <rect x="12" y="3" width="11" height="18" rx="3.2" fill="url(#markGrad)" />
-        </svg>
-        <div>
-          <div class="head-title">Ads Saver</div>
-          <div class="head-sub" id="head-sub">Meta Ad Library</div>
-        </div>
-        <div class="ogui-segments" id="space-seg" role="group" aria-label="Library"></div>
-      </header>
-
-      <nav class="ogui-segments" id="tabs" role="tablist" aria-label="Views"></nav>
-
-      <div class="view" id="view" role="tabpanel"></div>
-
-      <footer class="foot">
-        <button
-          type="button"
-          class="ogui-button ogui-button--primary ogui-control--medium"
-          id="btn-library"
-          hidden
-        >
-          Go to Ad Library
-        </button>
-        <button
-          type="button"
-          class="ogui-button ogui-control--medium"
-          id="btn-dash"
-        >
-          Open full dashboard
-        </button>
-      </footer>
-    </div>
-
-    <div class="toast ogui-toast" id="toast" role="status" aria-live="polite" data-ogui-glass data-ogui-material="frosted"></div>
-
-    <script src="panel.js"></script>
+    <div id="root"></div>
+    <script src="panel.bundle.js"></script>
   </body>
 </html>
