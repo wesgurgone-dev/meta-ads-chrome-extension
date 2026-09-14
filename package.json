@@ -5,8 +5,9 @@
   "description": "Capture ads from the Meta Ad Library, save them into lists, and download creatives.",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node tests/metrics.test.cjs",
-    "test:sql": "bash supabase/run-tests.sh"
+    "test": "node tests/metrics.test.cjs && node tests/merge.test.mjs",
+    "test:sql": "bash supabase/run-tests.sh",
+    "test:ui": "node tests/ui.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
