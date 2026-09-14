@@ -17,7 +17,10 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 - **Metrics**, collapsed by default so the grid leads, for the current space and filters: saves per day, top advertisers, format mix, placements, and (in a team space) who contributed what.
 - **Downloads at full resolution**, filed by list: `Downloads/MetaAdsLibrary/<list>/<advertiser>-<adId>.<ext>`. Switch to a folder per advertiser, or no subfolders, in Settings.
 - **Detail view that stays on screen.** Ad creatives are mostly 9:16; at the modal's full width that is around 1450px tall, so the creative is capped and letterboxed and the record below it stays reachable.
-- **Export** the current view as JSON or CSV.
+- **Score an ad out of ten** on hook, utility, succinctness and production quality. Each axis comes back with the frame it was judged on, a band, and a one-line quote of the evidence, because a 7 and an 8 are not a meaningful difference and a bare number implies they are. Video frames are captured when the ad is saved, not when you click Score: Meta's CDN links are signed and dead within hours, so scoring late would quietly fall back to one thumbnail and still return confident-looking numbers. Scores are cached per rubric version and shared with your team.
+- **Find advertisers in the same niche.** Point Discover at a list you already like. It derives search terms from what those ads share, runs them as background Ad Library searches on your own session, and ranks who comes back by how many of your terms they matched, how close their domain is, how many ads they run and how long those ads have been running. Marketplaces and deals sites are demoted with the reason shown. Nothing is sent to a scraper.
+- **A workflow canvas.** Drop reference ads on a canvas, write on each one what to take from it - the hook, the lighting, the humour, the product shots - wire them into the output, and generate a shot list and a script keyed to it. The notes are the brief; the canvas is how you lay it out. Deleting an ad from your library never touches a brief written about it.
+- **Export** the current view as JSON or CSV, and a shot list as plain text.
 
 ## Install (unpacked)
 
@@ -30,7 +33,7 @@ committed IIFE per page (`pnpm`-free: `npm install && node build.mjs`). React is
 there for one reason, OpenGlass UI's SVG/SDF refraction, which needs its runtime
 to generate a displacement map per surface. The content script and the service
 worker are deliberately **not** bundled and stay hand-written: they are the
-parts that run inside Facebook's page. Icons are checked in; regenerate with `node icons/generate-icons.mjs`. The mark is a stack of three cards, a swipe file: the front card carries the brand ramp, the two behind it are flat lilac at decreasing opacity, on a transparent background. Generated PNGs, the panel header and both dashboard marks are the same artwork, and a test fails if any of them drifts back to the old blue. Type is Helvetica throughout, weights 400/500/700 only (Helvetica has no real 600, so it would synthesise), with negative tracking applied at the body level and on every control that sets its own font shorthand, plus reduced tracking on uppercase micro-labels. Run the unit tests with `node tests/metrics.test.cjs`.
+parts that run inside Facebook's page. Icons are checked in; regenerate with `node icons/generate-icons.mjs`. The mark is a stack of three cards, a swipe file: the front card carries the brand ramp, the two behind it are flat lilac at decreasing opacity, on a transparent background. Generated PNGs, the panel header and both dashboard marks are the same artwork, and a test fails if any of them drifts back to the old blue. Type is Helvetica throughout, weights 400/500/700 only (Helvetica has no real 600, so it would synthesise), with negative tracking applied at the body level and on every control that sets its own font shorthand, plus reduced tracking on uppercase micro-labels. Run the unit tests with `npm test`, the browser suite with `npm run test:ui`, and the row-policy suite against a throwaway Postgres with `npm run test:sql`.
 
 ## Look
 

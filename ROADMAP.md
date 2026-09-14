@@ -1,56 +1,94 @@
 # Roadmap: next four builds
 
-## Where this stands (last session)
+## Where this stands
 
-**1. Supabase team spaces — built.** Schema, row policies and grants are live on
-the project and verified against it, not just applied. Client, sign-in by emailed
-six-digit code, Settings pane with a three-fact status readout, merge rules,
-push, pull-since, and a realtime subscription that re-pulls on every wake.
+All four items are built. What follows the divider is the original design
+document, kept because the reasoning in it is still the reasoning behind the
+code; where the build departed from it, the departure is noted here and in the
+commit that made it.
 
-*Open, and now blocked:* sign-in was attempted and **the six-digit code never
-arrived**. Most likely the default Magic Link email template renders only
-`{{ .ConfirmationURL }}` and never `{{ .Token }}`, so the code is generated but
-never shown. Diagnosis, the template to paste, and the fallbacks if it is
-something else are in `supabase/README.md`. Until this is resolved the
-authenticated path stays proven locally (14 SQL checks) but unproven against the
-live database, which blocks end-to-end testing of everything below.
+**1. Supabase team spaces - built.** Schema, row policies and grants are live on
+the project and verified against it. Client, sign-in by emailed six-digit code,
+Settings pane with a three-fact status readout, merge rules, push, pull-since,
+and a realtime subscription that re-pulls on every wake.
 
-**Shared groundwork — built.** `supabase/functions/claude` is an Anthropic proxy
-so no key ships in the extension, metered by `public.ai_usage` which a caller
-cannot clear. `src/supabase/ai.js` is the client side. Both items 3 and 4 depend
-on this and neither has to design it again.
+**2. Competitor discovery - built.** No Apify actor and no Meta API returns
+*similar* advertisers; every source takes a keyword or a page URL, which was the
+load-bearing question and the answer reshaped the feature. Similarity is
+manufactured instead: terms are derived from a list, searched as background Ad
+Library tabs on the user's own session, and the advertisers that come back are
+ranked on term coverage, domain proximity, ad volume and median days running,
+with marketplaces and deals sites demoted and the reason shown. No scraper is
+paid for. `src/discover/`, and the Discover tab in the dashboard.
 
-*Open:* deploy it. `supabase secrets set ANTHROPIC_API_KEY=...` then
-`supabase functions deploy claude`. `checkProxy()` in `src/supabase/ai.js` will
-tell you which of those two steps is missing.
+**3. AI ad ranking - built.** Four anchored axes out of ten, scored by
+`claude-opus-5` through the proxy. Frames are captured at save time in an
+offscreen document, because a signed CDN link is dead by the time anyone clicks
+Score. Scores cache on (ad, rubric version) locally and in the team.
+`src/rank/`, `offscreen/`, and the Score panel in an ad's detail view.
 
-**2, 3 and 4 — researched, not built.** Two workflows were running when the
-session ended, each fanning out over the open technical questions and having
-every finding refuted by three independent skeptics before synthesis:
+**4. Node canvas - built.** Reference ads as nodes with a free-text note on each
+saying what to take from it, wired into an output that writes a shot list and a
+script. Hand-rolled, not React Flow: the measured cost was 177KB against 30KB of
+headroom for a graph that is a star. `src/canvas/`, `dashboard/src/canvas.jsx`,
+and the Workflow tab.
 
-- `ads-roadmap-2-3` — competitor discovery and AI ranking. The load-bearing
-  question is whether any Apify actor returns *similar* advertisers or only
-  keyword matches, because the whole feature shape depends on the answer.
-- `ads-roadmap-4-canvas` — the node canvas. One question is deliberately
-  adversarial: whether the canvas earns its place over a plain list of
-  references with a text field beside each.
+### Open, and blocked
 
-Their results were not read before the session ended. Re-run them rather than
-guessing; the scripts are saved under the session's `workflows/scripts/`.
+**Sign-in.** The six-digit code never arrived. Most likely the default Magic Link
+template renders only `{{ .ConfirmationURL }}` and never `{{ .Token }}`, so the
+code is generated but never shown. The template to paste and the fallbacks are in
+`supabase/README.md`. Until this clears, the authenticated path is proven against
+a real Postgres (21 SQL checks) but not against the live project, which is what
+blocks end-to-end testing of everything that needs a team.
 
-## Sequencing
+### Open, and waiting on a deploy
 
-Unchanged: **1 → 3 → 2 → 4**, and item 1 is done. Item 3 (ranking) before item 2
-(discovery) because ranking works on ads already saved, while discovery depends
-on scraper behaviour nobody here controls.
+**The Anthropic proxy.** `supabase secrets set ANTHROPIC_API_KEY=...` then
+`supabase functions deploy claude`. Scoring and generation both go through it and
+neither can run until it is up; `checkProxy()` in `src/supabase/ai.js` says which
+of the two steps is missing. Everything either feature does *before* the call -
+frame capture, term derivation, the graph, the caches - works without it.
 
-Item 4 was promoted into the active roadmap by the owner.
+**The schema.** `supabase/schema.sql` has grown `ad_scores` and the four canvas
+tables since it was last applied. It is idempotent; re-run the whole file.
+
+### Open, and small
+
+- **Canvas sync.** The tables, policies and the parent-touch trigger are in the
+  schema, but `push`/`pull` in `src/supabase/sync.js` do not carry canvases yet.
+  Canvases are local-only until they do.
+- **Bundle headroom.** The dashboard bundle is at 547KB against the 560KB
+  assertion in `tests/ui.test.cjs`. The next sizeable dependency needs either a
+  raised budget with a stated reason, or the ESM split that was measured and
+  parked.
+- **Frames are opt-out-less.** Capture spends background bandwidth on every saved
+  video ad. It should be visible and disableable in Settings.
+- **Scoring cost is unmeasured.** Use `messages.count_tokens` on representative
+  frames before quoting a per-ad price; the old estimate predates thinking being
+  on by default and the high-resolution vision tier.
+
+### Where the build departed from the design below
+
+- **Storage of generated output.** The design says store the graph and regenerate
+  the script. The build stores runs. The output is not a pure function of the
+  graph - the model is nondeterministic and two of its inputs decay - so
+  regenerating is a new draft, not a refresh, and it re-bills. Staleness is
+  marked against a digest instead of resolved by discarding.
+- **A second Edge Function.** The design has a dedicated `rank-ad` function. The
+  build reuses the one generic proxy, which already meters and checks membership,
+  so there is one thing to deploy rather than three. The rubric and its schema
+  are frozen constants in `src/rank/`.
+- **React Flow.** Ruled out on a measured 177KB, not on the stale "no build step"
+  reason the design gives.
 
 ## Standing decisions
 
 - Local-only mode stays first class; sign-in is additive. The strongest claim
   this extension makes is that nothing leaves your machine, and a team feature
-  that quietly revokes it is a different product.
+  that quietly revokes it is a different product. Scoring and generation do send
+  content to a server, and that needs to stay a visible choice rather than a
+  default nobody noticed.
 - No credential ever reaches the repo or the bundle. The publishable key does,
   because that is what it is for; a test asserts no `service_role` key and no
   connection string are in the built bundles.
