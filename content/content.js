@@ -263,30 +263,6 @@
     }
   };
 
-  const findCard = (node) => {
-    let cur = node;
-    for (let i = 0; i < 14 && cur && cur !== document.body; i++) {
-      if (cur.querySelector && cur.querySelector("img, video")) return cur;
-      cur = cur.parentElement;
-    }
-    return null;
-  };
-
-  /** Facebook's own card action, e.g. "See ad details" / "See summary details". */
-  const findButtonAnchor = (card) => {
-    const candidates = card.querySelectorAll(
-      'div[role="button"], a[role="button"]',
-    );
-    let best = null;
-    for (const c of candidates) {
-      const text = (c.textContent || "").trim();
-      if (!text || text.length > 40) continue;
-      if (c.querySelector(".mal-bar")) continue;
-      best = c;
-    }
-    return best;
-  };
-
   const isHorizontalFlex = (node) => {
     const s = getComputedStyle(node);
     return (
@@ -296,29 +272,46 @@
   };
 
   /**
-   * Facebook lays its card buttons out inside horizontal flex rows. Inserting
-   * directly beside its button makes our bar just another item in that row,
-   * which squeezes and clips it. So climb to the outermost node still sitting
-   * in a horizontal row and insert after that, giving the bar its own line.
+   * How many distinct captured ads this subtree mentions. Stops counting at
+   * two, which is all the card-boundary walk needs to know.
    */
-  const insertBar = (card, bar) => {
-    const anchor = findButtonAnchor(card);
-    if (!anchor || !anchor.parentElement) {
-      card.appendChild(bar);
-      return;
+  const countCapturedIds = (node) => {
+    const text = node.textContent || "";
+    const seen = new Set();
+    ID_RE.lastIndex = 0;
+    let m;
+    while ((m = ID_RE.exec(text))) {
+      if (!captured.has(m[1])) continue;
+      seen.add(m[1]);
+      if (seen.size > 1) return 2;
     }
-    let node = anchor;
-    while (
-      node.parentElement &&
-      node.parentElement !== card &&
-      node.parentElement !== document.body &&
-      isHorizontalFlex(node.parentElement)
-    ) {
-      node = node.parentElement;
+    return seen.size;
+  };
+
+  /**
+   * The ad card's own root element.
+   *
+   * Anchoring to one of Facebook's buttons does not work: the last
+   * role=button in a card is "See summary details" on some cards and the
+   * "Shop now" CTA on others, so the row landed above the creative on some
+   * and squeezed into the CTA's narrow row on others. Instead, climb from the
+   * Library ID text until the subtree starts mentioning a second ad - that
+   * means we have stepped out of this card and into the results grid - and
+   * keep the outermost element that still describes exactly this one ad.
+   * Horizontal rows are skipped so the row is never appended into a flex row
+   * that would squeeze it.
+   */
+  const findCardRoot = (node) => {
+    let cur = node;
+    let best = null;
+    for (let i = 0; i < 25 && cur && cur !== document.body; i++) {
+      const n = countCapturedIds(cur);
+      if (n > 1) break;
+      if (n === 1 && cur.querySelector("img, video") && !isHorizontalFlex(cur))
+        best = cur;
+      cur = cur.parentElement;
     }
-    if (node.parentElement)
-      node.parentElement.insertBefore(bar, node.nextSibling);
-    else card.appendChild(bar);
+    return best;
   };
 
   const buildBar = (ad) => {
@@ -396,9 +389,10 @@
     }
 
     for (const { id, node } of hits) {
-      const card = findCard(node.parentElement);
+      const card = findCardRoot(node.parentElement);
       if (!card || card.querySelector(".mal-bar")) continue;
-      insertBar(card, buildBar(captured.get(id)));
+      // One dedicated spot: the last row of the card, always.
+      card.appendChild(buildBar(captured.get(id)));
     }
   };
 

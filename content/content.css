@@ -10,18 +10,23 @@
    Per-card action row
    --------------------------------------------------------------------- */
 
+/* The card's dedicated action strip: always the last row of the card, full
+   width, separated by a hairline so it reads as its own area rather than
+   floating between Facebook's own blocks. */
 .mal-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 8px 0 0;
-  padding: 0;
+  margin: 0;
+  padding: 10px 12px 12px;
   box-sizing: border-box;
-  /* Facebook's card buttons sit in horizontal flex rows. Claiming a full
-     line stops the row being squeezed in beside its own button. */
+  border-top: 1px solid #e4e6eb;
+  background: #fff;
   width: 100%;
   flex: 0 0 100%;
   min-width: 0;
+  /* Last child of the card, whatever order its own children use. */
+  order: 999;
   font-family:
     system-ui,
     -apple-system,
