@@ -66,6 +66,14 @@ tables since it was last applied. It is idempotent; re-run the whole file.
 - **Scoring cost is unmeasured.** Use `messages.count_tokens` on representative
   frames before quoting a per-ad price; the old estimate predates thinking being
   on by default and the high-resolution vision tier.
+- **Check the rubric actually caches.** Scoring runs on `claude-sonnet-5`, whose
+  minimum cacheable prefix is 1024 tokens against Opus 5's 512. The rubric is
+  around 4,000 characters, which straddles that line, and falling under it fails
+  silently - no error, just the rubric paid for in full on every ad. The score
+  record carries `cached` and the detail view prints "rubric cached" or "rubric
+  not cached"; check the first few real scores. If it reads not cached, the fix
+  is to extend the rubric's band anchors, which is worth doing on its own terms
+  rather than padding it.
 
 ### Where the build departed from the design below
 

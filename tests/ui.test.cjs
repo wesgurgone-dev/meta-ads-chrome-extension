@@ -542,8 +542,9 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(/optional/i.test(gating.signIn),
      `sign-in is marked optional, because nothing but teams needs it: ${gating.signIn.slice(0, 60)}`);
   ok(/team spaces/i.test(gating.signIn), 'and says what does need it');
-  ok(/2.5x/.test(gating.fast) && /double the price/.test(gating.fast),
-     'fast scoring states both what it buys and what it costs');
+  // Fast mode is Opus-5-only and doubles the price; on Sonnet it would be a
+  // switch that silently does nothing, which is worse than no switch.
+  ok(!gating.fast, 'no dead fast-scoring toggle now that the model is Sonnet');
   ok(settings.on === true, 'on by default, because scoring is useless without it');
   ok(/signed and stop working within hours/.test(settings.says),
      'and it says why it cannot wait until you click Score');

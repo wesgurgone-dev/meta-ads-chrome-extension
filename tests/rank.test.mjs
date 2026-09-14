@@ -21,6 +21,7 @@ import {
 } from "../src/rank/schema.js";
 import {
   FAILURE,
+  MODEL,
   adFacts,
   buildMessages,
   collectImages,
@@ -112,6 +113,18 @@ ok(/Advertiser: Hyro/.test(facts), "the advertiser");
 ok(/Body copy: Three minerals, no sugar\./.test(facts), "the body copy, which carries the pitch");
 ok(/Call to action: Shop now/.test(facts), "and the call to action");
 ok(!/undefined|null/.test(facts), "missing fields are dropped rather than rendered as null");
+
+console.log("\n--- the model, and the cache floor that comes with it ---");
+eq(MODEL, "claude-sonnet-5", "scoring runs on Sonnet 5");
+// Sonnet 5 will not cache a prefix under 1024 tokens, and it fails silently:
+// no error, just the rubric paid for in full on every single ad. The character
+// floor here is a coarse proxy for that token floor - if a future edit trims
+// the rubric, this is the assertion that should make somebody check the real
+// count with messages.count_tokens before shipping it.
+ok(
+  RUBRIC.length >= 3800,
+  `the rubric stays long enough to have a chance of caching on Sonnet (${RUBRIC.length} chars)`,
+);
 
 console.log("\n--- one number, red through green ---");
 const rgb = (css) => css.match(/\d+/g).map(Number);

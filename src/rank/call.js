@@ -17,7 +17,17 @@
 import { RUBRIC, RUBRIC_VERSION } from "./rubric.js";
 import { SCORE_SCHEMA, overallScore, validateScore } from "./schema.js";
 
-export const MODEL = "claude-opus-5";
+/**
+ * Sonnet 5 rather than Opus 5, chosen for cost.
+ *
+ * One thing changes with it that is invisible until the bill arrives: the
+ * minimum cacheable prefix is 1024 tokens on Sonnet 5, against 512 on Opus 5,
+ * and the rubric sits close to that line. Under it, the cached system block
+ * silently stops caching - no error, just `cache_read_input_tokens: 0` and the
+ * rubric paid for in full on every ad. The score record keeps the cache numbers
+ * so this is checkable on the first few real scores rather than assumed.
+ */
+export const MODEL = "claude-sonnet-5";
 const MAX_FRAMES = 5;
 
 /**
@@ -246,6 +256,9 @@ export const scoreAd = async (
       frames: seen.images.length,
       frameKind: seen.kind,
       usage: reply.usage || null,
+      // Whether the rubric was served from cache. See MODEL above: on Sonnet 5
+      // a prefix under 1024 tokens fails to cache silently.
+      cached: (reply.usage && reply.usage.cache_read_input_tokens) || 0,
       // How long the call itself took. "Scoring is slow" is otherwise an
       // impression; this makes it a number, and separates the model's time
       // from the frame extraction that runs before it.

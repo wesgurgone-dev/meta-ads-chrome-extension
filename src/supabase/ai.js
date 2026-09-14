@@ -9,8 +9,15 @@
 import { getClient, getSession } from "./client.js";
 import { loadConfig } from "./config.js";
 
-/** The model this feature is designed around. */
-export const MODEL = "claude-opus-5";
+/**
+ * The model these features are designed around.
+ *
+ * Sonnet 5, chosen for cost. Script and shot-list generation is the more
+ * demanding of the two callers - scoring is a bounded judgement against an
+ * anchored rubric, writing is not - so if one of them should go back to Opus 5
+ * it is this one.
+ */
+export const MODEL = "claude-sonnet-5";
 
 /**
  * One call. Returns { ok, content } or { ok: false, error }.

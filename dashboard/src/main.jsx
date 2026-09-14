@@ -397,6 +397,8 @@ const ScorePanel = ({ ad }) => {
               : "From the thumbnail only, so the pacing axes are weaker than they look"}
             {" · "}
             {score.model}
+            {score.ms ? ` · ${(score.ms / 1000).toFixed(1)}s` : ""}
+            {score.cached ? " · rubric cached" : score.cached === 0 ? " · rubric not cached" : ""}
             {score.problems ? ` · ${score.problems.join("; ")}` : ""}
           </p>
         </>
@@ -980,26 +982,6 @@ const SettingsModal = ({ state, onClose, onDone }) => {
             onDone();
           }}
           aria-label="Sync across devices"
-        />
-      </div>
-
-      <div className="toggle-row">
-        <div className="toggle-text">
-          <div><strong>Faster scoring</strong></div>
-          <div className="toggle-sub">
-            Runs the same model at up to 2.5x the output rate, for roughly double
-            the price per ad. Worth it while you are watching a score land;
-            wasteful on a bulk re-score.
-          </div>
-        </div>
-        <input
-          type="checkbox"
-          checked={state.settings.fastScoring === true}
-          onChange={async (e) => {
-            await send({ type: "SET_FAST_SCORING", enabled: e.target.checked });
-            onDone();
-          }}
-          aria-label="Faster scoring"
         />
       </div>
 
