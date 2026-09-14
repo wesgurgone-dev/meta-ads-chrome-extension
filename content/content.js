@@ -12,7 +12,8 @@
   "use strict";
 
   const MSG_TYPE = "MAL_ADS_CAPTURED";
-  const captured = new Map(); // adId -> normalized ad
+  const captured = new Map(); // adId -> ad from the GraphQL interceptor
+  const onPage = new Map(); // adId -> ad actually decorated on screen
   const savedIds = new Set();
 
   let targets = {
@@ -270,21 +271,55 @@
     );
   };
 
+  // "Library ID: 2027746121166762" and its localised equivalents are short.
+  // Capping the length keeps long body copy that happens to contain a digit
+  // run from being mistaken for a card's id line.
+  const ID_TEXT_MAX = 64;
+
   /**
-   * How many distinct captured ads this subtree mentions. Stops counting at
-   * two, which is all the card-boundary walk needs to know.
+   * Every place the page prints an ad id, as {id, node}.
+   *
+   * Deliberately independent of what the GraphQL interceptor captured. The
+   * number printed on a card is not always the id of the node we captured -
+   * collated cards ("3 ads use this creative and text") nest their creatives
+   * under a different archive id - and when those two sets did not intersect,
+   * requiring a match meant no card was decorated at all.
    */
-  const countCapturedIds = (node) => {
-    const text = node.textContent || "";
-    const seen = new Set();
-    ID_RE.lastIndex = 0;
-    let m;
-    while ((m = ID_RE.exec(text))) {
-      if (!captured.has(m[1])) continue;
-      seen.add(m[1]);
-      if (seen.size > 1) return 2;
+  const idOccurrences = () => {
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (n) => {
+          const v = n.nodeValue;
+          if (!v || v.length > ID_TEXT_MAX) return NodeFilter.FILTER_REJECT;
+          return /\d{12}/.test(v)
+            ? NodeFilter.FILTER_ACCEPT
+            : NodeFilter.FILTER_REJECT;
+        },
+      },
+    );
+    const out = [];
+    let n;
+    while ((n = walker.nextNode())) {
+      if (n.parentElement && n.parentElement.closest("#mal-panel")) continue;
+      ID_RE.lastIndex = 0;
+      const m = ID_RE.exec(n.nodeValue);
+      if (m) out.push({ id: m[1], node: n });
     }
-    return seen.size;
+    return out;
+  };
+
+  /** Distinct ad-id occurrences inside this subtree, counted up to two. */
+  const idsInside = (node, all) => {
+    let n = 0;
+    for (const occ of all) {
+      if (node.contains(occ.node)) {
+        n += 1;
+        if (n > 1) return 2;
+      }
+    }
+    return n;
   };
 
   /**
@@ -294,20 +329,20 @@
    * role=button in a card is "See summary details" on some cards and the
    * "Shop now" CTA on others, so the row landed above the creative on some
    * and squeezed into the CTA's narrow row on others. Instead, climb from the
-   * Library ID text until the subtree mentions a second ad - meaning we have
-   * stepped out of this card and into the results grid - and keep the
-   * outermost element that still describes exactly this one ad.
+   * id text until the subtree mentions a second ad - meaning we have stepped
+   * out of this card and into the results grid - and keep the outermost
+   * element that still describes exactly this one ad.
    *
-   * A column/block container is preferred, but a horizontal one is accepted
-   * as a fallback rather than returning nothing: a row in a slightly awkward
-   * place beats no row at all, and appendBar forces it onto its own line.
+   * A column/block container is preferred, but a horizontal one is accepted,
+   * and failing both we take the nearest ancestor holding the creative. This
+   * must never return null: doing so silently leaves a card with no controls.
    */
-  const findCardRoot = (node) => {
+  const findCardRoot = (node, all) => {
     let cur = node;
     let best = null;
     let anyShape = null;
     for (let i = 0; i < 25 && cur && cur !== document.body; i++) {
-      const n = countCapturedIds(cur);
+      const n = idsInside(cur, all);
       if (n > 1) break;
       if (n === 1 && cur.querySelector("img, video")) {
         anyShape = cur;
@@ -316,8 +351,6 @@
       cur = cur.parentElement;
     }
     if (best || anyShape) return best || anyShape;
-    // Last resort: the nearest ancestor holding the creative. Never return
-    // null, or the card silently gets no controls at all.
     let cheap = node;
     for (let i = 0; i < 14 && cheap && cheap !== document.body; i++) {
       if (cheap.querySelector && cheap.querySelector("img, video"))
@@ -340,6 +373,46 @@
       card.style.flexWrap = "wrap";
     }
     card.appendChild(bar);
+  };
+
+  /**
+   * An ad assembled from the card's own DOM, for when the printed id was not
+   * in the captured set. Less rich than the GraphQL record (no CTA type, no
+   * HD video URL) but enough to save the ad and download what is on screen.
+   */
+  const adFromCard = (id, card) => {
+    const media = [];
+    for (const img of card.querySelectorAll("img")) {
+      // Skip avatars and spacers; keep anything creative-sized.
+      if (img.naturalWidth && img.naturalWidth < 120) continue;
+      if (!/^https?:/.test(img.src || "")) continue;
+      media.push({ type: "image", url: img.src, previewUrl: img.src });
+    }
+    for (const vid of card.querySelectorAll("video")) {
+      const src = vid.currentSrc || vid.src;
+      if (src && /^https?:/.test(src))
+        media.push({
+          type: "video",
+          url: src,
+          hdUrl: null,
+          sdUrl: src,
+          previewUrl: vid.poster || null,
+        });
+      else if (vid.poster)
+        media.push({ type: "image", url: vid.poster, previewUrl: vid.poster });
+    }
+    // The advertiser name is the first strong/bold line in the card.
+    const nameEl = card.querySelector("strong, b, h3, h4");
+    const head = (card.textContent || "").slice(0, 300);
+    return {
+      id,
+      pageName: (nameEl && nameEl.textContent.trim()) || "Unknown page",
+      isActive: /\bactive\b/i.test(head) ? true : null,
+      media,
+      capturedAt: Date.now(),
+      libraryUrl: `https://www.facebook.com/ads/library/?id=${id}`,
+      fromDom: true,
+    };
   };
 
   const buildBar = (ad) => {
@@ -384,44 +457,30 @@
     return bar;
   };
 
+  let decoratedCount = 0;
+
   const decorateCards = () => {
-    if (captured.size === 0) return;
+    const all = idOccurrences();
+    if (all.length === 0) return;
 
-    const walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode: (node) =>
-          node.nodeValue && /\d{12}/.test(node.nodeValue)
-            ? NodeFilter.FILTER_ACCEPT
-            : NodeFilter.FILTER_REJECT,
-      },
-    );
-
-    const hits = [];
-    let textNode;
-    while ((textNode = walker.nextNode())) {
-      if (
-        textNode.parentElement &&
-        textNode.parentElement.closest("#mal-panel")
-      )
+    const done = new Set();
+    for (const occ of all) {
+      if (done.has(occ.id)) continue;
+      const card = findCardRoot(occ.node.parentElement, all);
+      if (!card) continue;
+      if (card.querySelector(".mal-bar")) {
+        done.add(occ.id);
         continue;
-      ID_RE.lastIndex = 0;
-      let m;
-      while ((m = ID_RE.exec(textNode.nodeValue))) {
-        if (captured.has(m[1])) {
-          hits.push({ id: m[1], node: textNode });
-          break;
-        }
       }
+      // Prefer the richer GraphQL record; fall back to the card's own DOM so a
+      // card is never left without controls just because the ids differ.
+      const ad = captured.get(occ.id) || adFromCard(occ.id, card);
+      onPage.set(occ.id, ad);
+      appendBar(card, buildBar(ad));
+      done.add(occ.id);
     }
-
-    for (const { id, node } of hits) {
-      const card = findCardRoot(node.parentElement);
-      if (!card || card.querySelector(".mal-bar")) continue;
-      // One dedicated spot: the last row of the card, always.
-      appendBar(card, buildBar(captured.get(id)));
-    }
+    decoratedCount = document.querySelectorAll(".mal-bar").length;
+    renderPanel();
   };
 
   const observer = new MutationObserver(() => {
@@ -546,35 +605,37 @@
   };
 
   const renderHome = (body) => {
-    const newCount = [...captured.keys()].filter(
-      (id) => !savedIds.has(id),
-    ).length;
+    // Everything the page is actually showing, whether it came from the
+    // network capture or was read off the card itself.
+    const pageAds = [...onPage.values()];
+    const newCount = pageAds.filter((a) => !savedIds.has(a.id)).length;
 
     const capture = el("div", "mal-card");
     capture.append(
-      el("div", "mal-card-title", `${captured.size} ads captured on this page`),
+      el("div", "mal-card-title", `${pageAds.length} ads on this page`),
       el(
         "div",
         "mal-card-sub",
-        newCount === 0
-          ? "All captured ads are already saved."
-          : `${newCount} not saved yet. Keep scrolling to capture more.`,
+        pageAds.length === 0
+          ? "Scroll the results to load ads."
+          : newCount === 0
+            ? "All of them are already saved."
+            : `${newCount} not saved yet. Keep scrolling for more.`,
       ),
     );
     const saveAll = el(
       "button",
       "mal-btn mal-btn-primary mal-full",
-      "Save all captured",
+      "Save all on page",
     );
     saveAll.type = "button";
     saveAll.disabled = newCount === 0;
     saveAll.addEventListener("click", () => {
-      const ads = [...captured.values()];
-      if (!ads.length) {
-        toast("Nothing captured yet. Scroll the results first.");
+      if (!pageAds.length) {
+        toast("No ads detected yet. Scroll the results first.");
         return;
       }
-      saveAds(ads);
+      saveAds(pageAds);
     });
     capture.appendChild(saveAll);
     body.appendChild(capture);
@@ -728,6 +789,26 @@
         "Team sharing, sync and export live in the full dashboard.",
       ),
     );
+
+    // Detection readout: if cards are on screen but none were decorated, this
+    // says so rather than the buttons just being quietly absent.
+    body.appendChild(el("div", "mal-section", "Detection"));
+    const matched = [...onPage.keys()].filter((id) => captured.has(id)).length;
+    const diag = el("div", "mal-card");
+    diag.append(
+      el("div", "mal-card-sub", `${onPage.size} ad cards found on the page`),
+      el(
+        "div",
+        "mal-card-sub",
+        `${decoratedCount} have Save / Download buttons`,
+      ),
+      el(
+        "div",
+        "mal-card-sub",
+        `${captured.size} captured from the network, ${matched} matched to a card`,
+      ),
+    );
+    body.appendChild(diag);
   };
 
   const renderPanel = () => {
