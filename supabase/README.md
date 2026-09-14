@@ -63,3 +63,48 @@ constraint. Without it the same creative arrives once per teammate.
 **`deleted_at` instead of `DELETE`.** A device that was offline when something
 was removed still holds it, and on its next push it would helpfully put it
 back. Tombstones also give undo for free.
+
+## Known issue: the six-digit code does not arrive
+
+Reported after the first real sign-in attempt. Not yet fixed, and not yet
+confirmed, so treat the diagnosis below as the first thing to check rather than
+the answer.
+
+**Most likely cause: the email template never renders the code.** Supabase's
+default *Magic Link* template contains only `{{ .ConfirmationURL }}`. The code
+is generated either way, but the email that goes out is a link and shows no
+digits at all, which looks identical to non-delivery.
+
+Fix in **Authentication → Email Templates → Magic Link**, adding the token:
+
+```html
+<h2>Your sign-in code</h2>
+<p>Enter this code in the extension:</p>
+<p style="font-size:28px;letter-spacing:6px"><strong>{{ .Token }}</strong></p>
+<p>Or follow this link instead: <a href="{{ .ConfirmationURL }}">sign in</a></p>
+```
+
+**Second candidate: the built-in SMTP.** It is rate limited to a handful of
+messages an hour and is documented as being for testing, not delivery. On newer
+projects it will only send to addresses attached to the Supabase organisation
+and drops everything else silently. **Authentication → Emails** shows whether
+custom SMTP is configured; if the template fix does not do it, this is next.
+
+**Check the logs before changing anything else.** Project → Logs → Auth shows
+whether the send was attempted and what came back, which settles delivery
+versus template in one look.
+
+### If it stays broken
+
+The client already has everything needed to switch: `sendCode` and `verifyCode`
+in `src/supabase/client.js` are the only two call sites, and both are one line.
+Options, in order of how little has to change:
+
+1. **Magic link instead of a code.** Same `signInWithOtp` call, no template
+   edit, but it needs a redirect URL registered and `launchWebAuthFlow` to catch
+   it, which is the complexity the code was chosen to avoid.
+2. **Password sign-in.** `signInWithPassword`, no email in the loop at all.
+   Cheapest to make work, worst to live with.
+3. **Google OAuth.** Best experience for this audience, who are already in a
+   Google session, but it needs provider setup and the same redirect handling as
+   option 1.

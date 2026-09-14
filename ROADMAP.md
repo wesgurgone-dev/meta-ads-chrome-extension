@@ -7,9 +7,13 @@ the project and verified against it, not just applied. Client, sign-in by emaile
 six-digit code, Settings pane with a three-fact status readout, merge rules,
 push, pull-since, and a realtime subscription that re-pulls on every wake.
 
-*Open:* the owner has not signed in yet, so the authenticated path is proven
-locally (14 SQL checks) but not against the live database. Do that first: it is
-five minutes and it unblocks end-to-end testing of everything below.
+*Open, and now blocked:* sign-in was attempted and **the six-digit code never
+arrived**. Most likely the default Magic Link email template renders only
+`{{ .ConfirmationURL }}` and never `{{ .Token }}`, so the code is generated but
+never shown. Diagnosis, the template to paste, and the fallbacks if it is
+something else are in `supabase/README.md`. Until this is resolved the
+authenticated path stays proven locally (14 SQL checks) but unproven against the
+live database, which blocks end-to-end testing of everything below.
 
 **Shared groundwork — built.** `supabase/functions/claude` is an Anthropic proxy
 so no key ships in the extension, metered by `public.ai_usage` which a caller
