@@ -7,8 +7,8 @@
     "storage",
     "unlimitedStorage",
     "downloads",
-    "scripting",
-    "activeTab"
+    "sidePanel",
+    "tabs"
   ],
   "host_permissions": [
     "https://www.facebook.com/*",
@@ -37,7 +37,9 @@
         "https://www.facebook.com/ads/library*",
         "https://web.facebook.com/ads/library*"
       ],
-      "js": ["content/interceptor.js"],
+      "js": [
+        "content/interceptor.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
@@ -46,9 +48,16 @@
         "https://www.facebook.com/ads/library*",
         "https://web.facebook.com/ads/library*"
       ],
-      "js": ["content/content.js"],
-      "css": ["content/content.css"],
+      "js": [
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "side_panel": {
+    "default_path": "panel/panel.html"
+  }
 }

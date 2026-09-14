@@ -6,8 +6,8 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 
 - **Native save controls.** A Save split-button and Download button are inserted into each ad card as their own full-width row, styled to match Facebook's controls, rather than floating over the creative.
 - **Save straight into a list.** The caret beside Save opens a menu of your spaces and colour-coded lists, so an ad goes where it belongs in one click.
-- **Side panel, opened from the toolbar button on any page.** On the Ad Library the panel slides out over the results; anywhere else the content script is injected on demand so the same workspace opens there too, with a **Go to Ad Library** button that hides itself once you are on the Library. Restricted pages (`chrome://`, the Web Store, the PDF viewer) refuse injection and fall back to the dashboard.
-- **Panel views.** Clicking the extension icon slides out a workspace on the Ad Library itself, with Home, Saved, Lists and Account views: what is on the page and save-all, live counts, recently saved ads, and one-click pinning of the list new saves default to. There is no floating on-page button, and no popup: off the Ad Library the toolbar button opens the dashboard instead. The full dashboard is a footer link rather than the only place anything happens.
+- **A real browser side panel**, docked beside the page rather than floating over it. The toolbar button opens it on any tab, including `chrome://` pages and the Web Store, because Chrome owns the surface rather than the extension injecting one. Home, Saved, Lists and Account, with a **Go to Ad Library** button that hides itself once the tab is already there.
+- **Side panel, opened from the toolbar button.** Clicking the extension icon slides out a workspace on the Ad Library itself, with Home, Saved, Lists and Account views: what is on the page and save-all, live counts, recently saved ads, and one-click pinning of the list new saves default to. There is no floating on-page button, and no popup: off the Ad Library the toolbar button opens the dashboard instead. The full dashboard is a footer link rather than the only place anything happens.
 - **Spaces.** Keep separate libraries (per client, per project). Every space has its own lists, metrics, and exports.
 - **Team spaces.** Create a team space to get a join code, export it as a space file, and teammates merge it into the same space. Everyone's lists combine and saves are attributed by name.
 - **Colour-coded lists.** Eight label colours, editable per list; the colour shows in the sidebar, on each ad card, and in the save menu.
@@ -24,6 +24,41 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 3. Browse `facebook.com/ads/library`, scroll some results, and hit **Save** on any ad.
 
 No build step; plain MV3 JavaScript. Icons are checked in; regenerate with `node icons/generate-icons.mjs`. The mark is a stack of three cards, a swipe file: the front card solid in the accent blue, the two behind it progressively more transparent, on a transparent background. The reference was white cards on black, but a white front card disappears against a light Chrome toolbar, so the stack is tinted instead of inverted. Type is Helvetica throughout, weights 400/500/700 only (Helvetica has no real 600, so it would synthesise), with negative tracking applied at the body level and on every control that sets its own font shorthand, plus reduced tracking on uppercase micro-labels. Run the unit tests with `node tests/metrics.test.cjs`.
+
+## Look
+
+The ground is one gradient ramp, used everywhere:
+
+```
+#070707  0%     #4510e8  50%     #ed0cdd  71%     #ffc41d  86%     #ffffff 100%
+```
+
+It is not painted as a ramp. Each stop is pulled out into its own oversized
+radial blob, the whole thing is blurred hard, and a scrim sits on top: enough
+to keep type legible, not so much that four distinct colours collapse into one
+purple. Grain over the scrim and again, fainter, on the glass hides the banding
+a gradient this large would otherwise show, and gives the blur something to
+work on so the two surfaces meet without a hard synthetic line.
+
+Above the ground there is exactly one material. Every bubble (header, tabs,
+cards, stat tiles, ad cards, list rows, buttons, toast) is translucent, blurred,
+saturated, with a bright top edge where light catches it and a specular sheen
+down the top-left. Nothing is opaque and no glass stacks on glass, which is
+where legibility collapses. Text never sits directly on the ramp: section labels
+and empty states carry their own strip of material, because the ramp is vivid by
+design and vivid is unreadable.
+
+Type is SF Pro Display where it exists. Apple's font is licensed for Apple
+platforms and is **not** redistributed here: the stack asks for it by name, then
+falls back to `-apple-system`, Inter, and Helvetica. Tracking is size-specific,
+tight on headings and near zero on body, because one `letter-spacing` value is
+wrong somewhere.
+
+Motion is minimal and lives on the press rather than the release. Both themes
+share the ramp; the theme changes the scrim and the material, not the artwork.
+`prefers-reduced-transparency` drops the blur and the grain for solid surfaces,
+`prefers-contrast: more` firms up the edges, and `prefers-reduced-motion`
+removes the press transforms.
 
 ## Teams: how sharing actually works
 
@@ -87,12 +122,18 @@ CTR, ROAS, conversions, and an ad's social save count are never public.
 ```
 manifest.json            MV3 manifest
 content/interceptor.js   MAIN world: hooks fetch/XHR, parses GraphQL, postMessage
-content/content.js       ISOLATED world: card action row, save menu, side panel
+content/content.js       ISOLATED world: card action row and save menu only
+panel/                   the browser side panel: its own page, its own look
 background.js            service worker: spaces/lists/ads, downloads, team bundles, sync
 dashboard/metrics.js     aggregation (pure, unit-tested)
 dashboard/               spaces, colour-coded lists, metrics, team and sync UI
-tests/                   node tests for the metrics module
+tests/                   node tests for metrics, playwright tests for the panel
 ```
+
+The panel is a real side panel, so it cannot read the page. What is on screen
+comes from the content script over `GET_PAGE_ADS`, and a tab with no content
+script simply never answers, which the panel reads as "nothing here" rather
+than as an error.
 
 Storage shape: `spaces` hold `lists`, lists hold ad ids, and `ads` are stored once and referenced, so the same ad in two lists is one record.
 

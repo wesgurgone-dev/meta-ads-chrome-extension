@@ -1,17 +1,12 @@
 /**
- * Isolated-world content script.
+ * Isolated-world content script for facebook.com/ads/library.
  *
- * Two jobs:
- *   1. Decorate each ad card with a Save split-button and a Download button,
- *      styled like Facebook's own controls and laid out as their own row.
- *      Only on the Ad Library; there are no cards anywhere else.
- *   2. Run the side panel: a slide-out workspace showing what has been
- *      captured, what is saved, and the colour-coded lists, so the common
- *      work happens here instead of bouncing to the dashboard.
+ * One job: decorate each ad card with a Save split-button and a Download
+ * button, styled like Facebook's own controls and laid out as their own row.
  *
- * Declared for facebook.com/ads/library in the manifest, and injected on
- * demand by the toolbar button on any other page, so the panel is reachable
- * from wherever you are rather than only from the Library.
+ * The workspace UI used to live here as an injected panel. It is now a real
+ * browser side panel (panel/panel.html), so this script's only other duty is
+ * answering GET_PAGE_ADS and telling the panel when what is on screen changed.
  */
 (() => {
   "use strict";
@@ -39,10 +34,7 @@
     defaultListId: null,
     theme: "system",
   };
-  let store = { ads: {}, lists: {}, spaces: {}, settings: {}, identity: {} };
   let openMenu = null;
-  let panelEl = null;
-  let view = "home";
 
   // ---------------------------------------------------------------------
   // Messaging
@@ -73,13 +65,17 @@
     };
     for (const id of res.savedIds || []) savedIds.add(id);
     refreshSavedButtons();
-    applyTheme();
   };
 
-  const refreshStore = async () => {
-    const res = await send({ type: "GET_STATE" });
-    if (res.ok) store = res;
-    renderPanel();
+  /** The panel holds its own copy of the store; nudge it to re-read. */
+  const notifyPanel = () => {
+    try {
+      chrome.runtime.sendMessage({ type: "PAGE_ADS_CHANGED" }, () => {
+        void chrome.runtime.lastError; // no panel open is the normal case
+      });
+    } catch (err) {
+      /* extension context went away; the page reload will reconnect */
+    }
   };
 
   window.addEventListener("message", (event) => {
@@ -92,7 +88,7 @@
       indexMedia(ad);
     }
     decorateCards();
-    renderPanel();
+    notifyPanel();
   });
 
   // ---------------------------------------------------------------------
@@ -112,47 +108,8 @@
     return Math.max(1, Math.round((end - ad.startDate) / 86400000));
   };
 
-  const prefersDark =
-    typeof matchMedia === "function"
-      ? matchMedia("(prefers-color-scheme: dark)")
-      : null;
-
-  /**
-   * The panel follows the extension's own theme setting, which can differ
-   * from the OS, so this is a class rather than a media query. The per-card
-   * action row is deliberately left alone: it sits inside Facebook's card and
-   * has to match Facebook, not us.
-   */
-  const applyTheme = () => {
-    if (!panelEl) return;
-    const choice = targets.theme || "system";
-    const dark =
-      choice === "dark" ||
-      (choice === "system" && !!(prefersDark && prefersDark.matches));
-    panelEl.classList.toggle("mal-dark", dark);
-  };
-
-  if (prefersDark && prefersDark.addEventListener)
-    prefersDark.addEventListener("change", () => applyTheme());
-
-  const activeLists = () =>
-    targets.lists.filter((l) => l.spaceId === targets.activeSpaceId);
-
   const activeSpace = () =>
     targets.spaces.find((s) => s.id === targets.activeSpaceId) || null;
-
-  /** Ads saved in the active space, newest first. */
-  const savedInSpace = () => {
-    const ids = new Set();
-    for (const l of Object.values(store.lists || {})) {
-      if (l.spaceId !== (store.settings || {}).activeSpaceId) continue;
-      for (const id of l.adIds) ids.add(id);
-    }
-    return [...ids]
-      .map((id) => (store.ads || {})[id])
-      .filter(Boolean)
-      .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-  };
 
   const toast = (message) => {
     let node = document.getElementById("mal-toast");
@@ -192,7 +149,7 @@
     );
     refreshSavedButtons();
     refreshTargets();
-    refreshStore();
+    notifyPanel();
   };
 
   const downloadAd = async (ad) => {
@@ -286,8 +243,7 @@
     foot.addEventListener("click", (e) => {
       e.stopPropagation();
       closeMenu();
-      setView("lists");
-      openPanel();
+      send({ type: "OPEN_PANEL" });
     });
     menu.appendChild(foot);
 
@@ -663,492 +619,13 @@
       done.add(occ.id);
     }
     decoratedCount = document.querySelectorAll(".mal-bar").length;
-    renderPanel();
+    notifyPanel();
   };
 
   const observer = new MutationObserver(() => {
     clearTimeout(observer.__malTimer);
     observer.__malTimer = setTimeout(decorateCards, 400);
   });
-
-  // ---------------------------------------------------------------------
-  // Side panel
-  // ---------------------------------------------------------------------
-
-  const ICONS = {
-    home: '<path d="M3 9.5L10 4l7 5.5V16a1 1 0 01-1 1h-4v-4H8v4H4a1 1 0 01-1-1V9.5z"/>',
-    saved: '<path d="M5 3h10a1 1 0 011 1v13l-6-3.5L4 17V4a1 1 0 011-1z"/>',
-    lists:
-      '<path d="M3 5h3v3H3V5zm5 .5h9v2H8v-2zM3 11h3v3H3v-3zm5 .5h9v2H8v-2z"/>',
-    account:
-      '<path d="M10 10a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm0 1.8c-3.3 0-6 1.8-6 4v1.2h12V15.8c0-2.2-2.7-4-6-4z"/>',
-  };
-
-  const buildPanel = () => {
-    if (panelEl) return;
-    panelEl = el("div", "mal-panel mal-closed");
-    panelEl.id = "mal-panel";
-    panelEl.innerHTML = `
-      <nav class="mal-rail">
-        ${["home", "saved", "lists", "account"]
-          .map(
-            (k) => `<button type="button" class="mal-rail-btn" data-view="${k}">
-              <svg viewBox="0 0 20 20" width="19" height="19" aria-hidden="true">${ICONS[k]}</svg>
-              <span>${k === "account" ? "Account" : k[0].toUpperCase() + k.slice(1)}</span>
-            </button>`,
-          )
-          .join("")}
-      </nav>
-      <div class="mal-main">
-        <header class="mal-head">
-          <span class="mal-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><defs><linearGradient id="malMarkPanel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a78d6"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect x="1" y="7" width="8.5" height="10" rx="2" fill="url(#malMarkPanel)" opacity=".26"/><rect x="6" y="5" width="9.5" height="14" rx="2.2" fill="url(#malMarkPanel)" opacity=".5"/><rect x="12" y="3" width="11" height="18" rx="2.6" fill="url(#malMarkPanel)"/></svg></span>
-          <div>
-            <div class="mal-head-title">Ads Saver</div>
-            <div class="mal-head-sub" id="mal-head-sub"></div>
-          </div>
-          <button type="button" class="mal-x" aria-label="Close panel">&#10005;</button>
-        </header>
-        <div class="mal-view" id="mal-view"></div>
-        <footer class="mal-foot">
-          <button type="button" class="mal-btn mal-btn-primary mal-full" id="mal-open-library" hidden>
-            Go to Ad Library
-          </button>
-          <button type="button" class="mal-btn mal-btn-secondary mal-full" id="mal-open-dash">
-            Open full dashboard
-          </button>
-        </footer>
-      </div>`;
-    document.documentElement.appendChild(panelEl);
-
-    panelEl.querySelector(".mal-x").addEventListener("click", closePanel);
-    panelEl
-      .querySelector("#mal-open-dash")
-      .addEventListener("click", () => send({ type: "OPEN_DASHBOARD" }));
-    panelEl
-      .querySelector("#mal-open-library")
-      .addEventListener("click", () => send({ type: "OPEN_LIBRARY" }));
-    panelEl.querySelectorAll(".mal-rail-btn").forEach((btn) => {
-      btn.addEventListener("click", () => setView(btn.dataset.view));
-    });
-    applyTheme();
-  };
-
-  const openPanel = () => {
-    if (!panelEl) buildPanel();
-    panelEl.classList.remove("mal-closed");
-    try {
-      localStorage.setItem("mal.panelOpen", "1");
-    } catch (err) {
-      /* storage blocked; the panel still opens for this session */
-    }
-    refreshStore();
-  };
-
-  const closePanel = () => {
-    panelEl.classList.add("mal-closed");
-    try {
-      localStorage.setItem("mal.panelOpen", "0");
-    } catch (err) {
-      /* ignore */
-    }
-  };
-
-  const setView = (next) => {
-    view = next;
-    renderPanel();
-  };
-
-  const statTile = (value, label) => {
-    const t = el("div", "mal-stat");
-    t.append(
-      el("div", "mal-stat-value", String(value)),
-      el("div", "mal-stat-label", label),
-    );
-    return t;
-  };
-
-  /** Creative format, mirroring the dashboard's rule. */
-  const formatOf = (ad) => {
-    const kinds = (ad.media || []).length
-      ? ad.media.map((m) => m.type)
-      : ad.mediaKinds || [];
-    if (kinds.filter((k) => k !== "video").length > 1) return "carousel";
-    if (kinds.some((k) => k === "video")) return "video";
-    if (kinds.length) return "image";
-    return "text";
-  };
-
-  const thumbOf = (ad) => {
-    if (ad.thumbDataUrl) return ad.thumbDataUrl;
-    const m = (ad.media || []).find((x) => x.previewUrl) || (ad.media || [])[0];
-    return (m && (m.previewUrl || (m.type === "image" ? m.url : null))) || null;
-  };
-
-  /** Lists in the active space that hold this ad, for its colour chips. */
-  const listsForAd = (id) =>
-    Object.values(store.lists || {}).filter(
-      (l) =>
-        l.spaceId === (store.settings || {}).activeSpaceId &&
-        (l.adIds || []).includes(id),
-    );
-
-  /**
-   * A compact version of the dashboard's ad card: creative, status and format
-   * badges, advertiser, longevity, list colour, and the two actions.
-   */
-  const miniCard = (ad) => {
-    const card = el("div", "mal-mini");
-
-    const media = el("div", "mal-mini-media");
-    const thumb = thumbOf(ad);
-    if (thumb) {
-      const img = el("img");
-      img.src = thumb;
-      img.alt = "";
-      img.loading = "lazy";
-      media.appendChild(img);
-    } else {
-      media.appendChild(
-        el(
-          "div",
-          "mal-mini-ph",
-          (ad.pageName || "?").slice(0, 1).toUpperCase(),
-        ),
-      );
-    }
-    if (ad.isActive === true)
-      media.appendChild(el("span", "mal-mini-badge mal-mini-live", "ACTIVE"));
-    else if (ad.isActive === false)
-      media.appendChild(el("span", "mal-mini-badge mal-mini-ended", "ENDED"));
-    media.appendChild(
-      el("span", "mal-mini-badge mal-mini-fmt", formatOf(ad).toUpperCase()),
-    );
-    media.addEventListener("click", () => window.open(ad.libraryUrl, "_blank"));
-    card.appendChild(media);
-
-    const body = el("div", "mal-mini-body");
-    const name = el("div", "mal-mini-name", ad.pageName || "Unknown page");
-    name.title = "Open in the Ad Library";
-    name.addEventListener("click", () => window.open(ad.libraryUrl, "_blank"));
-    body.appendChild(name);
-
-    const days = daysRunning(ad);
-    body.appendChild(
-      el(
-        "div",
-        "mal-mini-sub",
-        [
-          days != null ? `${days}d running` : null,
-          ad.savedBy ? `by ${ad.savedBy}` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ") || "\u2014",
-      ),
-    );
-
-    const lists = listsForAd(ad.id);
-    if (lists.length) {
-      const chips = el("div", "mal-mini-chips");
-      for (const l of lists.slice(0, 2)) {
-        const chip = el("span", "mal-mini-chip");
-        const dot = el("span", "mal-dot");
-        dot.style.background = l.color;
-        chip.append(dot, el("span", null, l.name));
-        chips.appendChild(chip);
-      }
-      body.appendChild(chips);
-    }
-
-    // At mini width two labelled buttons do not fit, so Download is the one
-    // full-width action and the creative itself opens the ad.
-    const actions = el("div", "mal-mini-actions");
-    const dl = el("button", "mal-btn mal-btn-primary mal-mini-btn", "Download");
-    dl.type = "button";
-    dl.addEventListener("click", () => downloadAd(ad));
-    actions.appendChild(dl);
-    body.appendChild(actions);
-
-    card.appendChild(body);
-    return card;
-  };
-
-  const miniGrid = (ads) => {
-    const grid = el("div", "mal-mini-grid");
-    for (const ad of ads) grid.appendChild(miniCard(ad));
-    return grid;
-  };
-
-  const renderHome = (body) => {
-    // Everything the page is actually showing, whether it came from the
-    // network capture or was read off the card itself.
-    const pageAds = [...onPage.values()];
-    const newCount = pageAds.filter((a) => !savedIds.has(a.id)).length;
-
-    if (!onLibrary()) {
-      // Off the Library there is nothing to capture here, so say that plainly
-      // rather than showing a disabled "Save all on page" and a zero count.
-      const away = el("div", "mal-card");
-      away.append(
-        el("div", "mal-card-title", "Not on the Ad Library"),
-        el(
-          "div",
-          "mal-card-sub",
-          "Your library is below. Head to the Ad Library to capture new ads.",
-        ),
-      );
-      const go = el(
-        "button",
-        "mal-btn mal-btn-primary mal-full",
-        "Go to Ad Library",
-      );
-      go.type = "button";
-      go.addEventListener("click", () => send({ type: "OPEN_LIBRARY" }));
-      away.appendChild(go);
-      body.appendChild(away);
-      renderHomeStats(body);
-      return;
-    }
-
-    const capture = el("div", "mal-card");
-    capture.append(
-      el(
-        "div",
-        "mal-card-title",
-        `${pageAds.length} ad${pageAds.length === 1 ? "" : "s"} on this page`,
-      ),
-      el(
-        "div",
-        "mal-card-sub",
-        pageAds.length === 0
-          ? "Scroll the results to load ads."
-          : newCount === 0
-            ? "All of them are already saved."
-            : `${newCount} not saved yet. Keep scrolling for more.`,
-      ),
-    );
-    const saveAll = el(
-      "button",
-      "mal-btn mal-btn-primary mal-full",
-      "Save all on page",
-    );
-    saveAll.type = "button";
-    saveAll.disabled = newCount === 0;
-    saveAll.addEventListener("click", () => {
-      if (!pageAds.length) {
-        toast("No ads detected yet. Scroll the results first.");
-        return;
-      }
-      saveAds(pageAds);
-    });
-    capture.appendChild(saveAll);
-    body.appendChild(capture);
-
-    renderHomeStats(body);
-  };
-
-  // The library summary, shown on Home whether or not this page has ads on it.
-  const renderHomeStats = (body) => {
-    const saved = savedInSpace();
-    const week = saved.filter(
-      (a) => (a.savedAt || 0) >= Date.now() - 7 * 86400000,
-    ).length;
-    const active = saved.filter((a) => a.isActive === true).length;
-    const stats = el("div", "mal-stats");
-    stats.append(
-      statTile(saved.length, "Saved"),
-      statTile(week, "This week"),
-      statTile(activeLists().length, "Lists"),
-      statTile(active, "Active"),
-    );
-    body.appendChild(stats);
-
-    body.appendChild(el("div", "mal-section", "Recently saved"));
-    if (saved.length === 0) {
-      body.appendChild(
-        el("div", "mal-empty", "Nothing saved in this space yet."),
-      );
-    } else {
-      body.appendChild(miniGrid(saved.slice(0, 4)));
-    }
-  };
-
-  const renderSaved = (body) => {
-    const saved = savedInSpace();
-    body.appendChild(
-      el("div", "mal-section", `${saved.length} saved in this space`),
-    );
-    if (saved.length === 0) {
-      body.appendChild(
-        el("div", "mal-empty", "Save an ad and it shows up here."),
-      );
-      return;
-    }
-    body.appendChild(miniGrid(saved.slice(0, 50)));
-    if (saved.length > 50)
-      body.appendChild(
-        el(
-          "div",
-          "mal-empty",
-          `Showing the 50 most recent. Open the dashboard for all.`,
-        ),
-      );
-  };
-
-  const renderLists = (body) => {
-    const lists = activeLists();
-    body.appendChild(el("div", "mal-section", "Lists in this space"));
-    body.appendChild(
-      el(
-        "div",
-        "mal-card-sub",
-        "Pick a list to make it the default for new saves.",
-      ),
-    );
-    if (lists.length === 0)
-      body.appendChild(el("div", "mal-empty", "No lists yet."));
-    for (const list of lists) {
-      const isDefault = list.id === targets.defaultListId;
-      const row = el(
-        "button",
-        "mal-list-row" + (isDefault ? " mal-is-default" : ""),
-      );
-      row.type = "button";
-      const dot = el("span", "mal-dot");
-      dot.style.background = list.color;
-      const name = el("span", "mal-list-name", list.name);
-      const count = el("span", "mal-list-count", String(list.adIds.length));
-      row.append(dot, name, count);
-      if (isDefault) row.append(el("span", "mal-default-tag", "default"));
-      row.addEventListener("click", async () => {
-        await send({
-          type: "SET_DEFAULT_LIST",
-          listId: isDefault ? null : list.id,
-        });
-        await refreshTargets();
-        renderPanel();
-        toast(isDefault ? "Default cleared" : `New saves go to ${list.name}`);
-      });
-      body.appendChild(row);
-    }
-
-    const add = el(
-      "button",
-      "mal-btn mal-btn-secondary mal-full",
-      "+ New list",
-    );
-    add.type = "button";
-    add.addEventListener("click", async () => {
-      const name = prompt("List name:");
-      if (!name) return;
-      await send({ type: "LIST_OP", op: "create", name });
-      await refreshTargets();
-      renderPanel();
-    });
-    body.appendChild(add);
-  };
-
-  const renderAccount = (body) => {
-    const space = activeSpace();
-    body.appendChild(el("div", "mal-section", "Space"));
-    const sel = el("select", "mal-select");
-    for (const s of targets.spaces) {
-      const opt = el(
-        "option",
-        null,
-        s.name + (s.kind === "team" ? " (team)" : ""),
-      );
-      opt.value = s.id;
-      if (s.id === targets.activeSpaceId) opt.selected = true;
-      sel.appendChild(opt);
-    }
-    sel.addEventListener("change", async () => {
-      await send({ type: "SPACE_OP", op: "activate", spaceId: sel.value });
-      await refreshTargets();
-      await refreshStore();
-    });
-    body.appendChild(sel);
-
-    if (space && space.kind === "team") {
-      const code = el("div", "mal-card");
-      code.append(
-        el("div", "mal-card-sub", "Team join code"),
-        el("div", "mal-code", space.code),
-        el(
-          "div",
-          "mal-card-sub",
-          "Teammates merge your exported space file to combine lists.",
-        ),
-      );
-      body.appendChild(code);
-    }
-
-    body.appendChild(el("div", "mal-section", "Saved as"));
-    body.appendChild(
-      el(
-        "div",
-        "mal-card-sub",
-        store.identity ? store.identity.displayName || "Me" : "Me",
-      ),
-    );
-    body.appendChild(
-      el(
-        "div",
-        "mal-empty",
-        "Team sharing, sync and export live in the full dashboard.",
-      ),
-    );
-
-    // Detection readout: if cards are on screen but none were decorated, this
-    // says so rather than the buttons just being quietly absent.
-    body.appendChild(el("div", "mal-section", "Detection"));
-    const matched = [...onPage.keys()].filter((id) => captured.has(id)).length;
-    const diag = el("div", "mal-card");
-    diag.append(
-      el(
-        "div",
-        "mal-card-sub",
-        `${onPage.size} ad card${onPage.size === 1 ? "" : "s"} found on the page`,
-      ),
-      el(
-        "div",
-        "mal-card-sub",
-        `${decoratedCount} have Save / Download buttons`,
-      ),
-      el(
-        "div",
-        "mal-card-sub",
-        `${captured.size} captured from the network, ${matched} matched to a card`,
-      ),
-    );
-    body.appendChild(diag);
-  };
-
-  const renderPanel = () => {
-    if (!panelEl) return;
-    if (panelEl.classList.contains("mal-closed")) return;
-
-    const space = activeSpace();
-    panelEl.querySelector("#mal-head-sub").textContent = space
-      ? space.name + (space.kind === "team" ? " · team" : "")
-      : "Meta Ad Library";
-
-    panelEl.querySelectorAll(".mal-rail-btn").forEach((b) => {
-      b.classList.toggle("mal-active", b.dataset.view === view);
-    });
-
-    // The button exists to get you to the Library, so it has no job once you
-    // are on it. Checked on every render because a SPA navigation can move the
-    // tab onto or off the Library without reloading this script.
-    ensureLibraryMode();
-    panelEl.querySelector("#mal-open-library").hidden = onLibrary();
-
-    const body = panelEl.querySelector("#mal-view");
-    body.innerHTML = "";
-    if (view === "home") renderHome(body);
-    else if (view === "saved") renderSaved(body);
-    else if (view === "lists") renderLists(body);
-    else renderAccount(body);
-  };
 
   // ---------------------------------------------------------------------
   // Boot
@@ -1172,39 +649,33 @@
   };
 
   const boot = async () => {
-    buildPanel();
     ensureLibraryMode();
     await refreshTargets();
-    await refreshStore();
-    let wasOpen = "0";
-    try {
-      wasOpen = localStorage.getItem("mal.panelOpen") || "0";
-    } catch (err) {
-      /* ignore */
-    }
-    if (wasOpen === "1") openPanel();
-    else renderPanel();
+    notifyPanel();
   };
 
   if (document.body) boot();
   else document.addEventListener("DOMContentLoaded", boot, { once: true });
 
-  // The toolbar button toggles the panel; there is no floating launcher.
+  /**
+   * The side panel cannot read this page, so it asks. A tab without this
+   * script simply never answers, which the panel reads as "nothing here".
+   */
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (!msg || msg.type !== "TOGGLE_PANEL") return false;
-    buildPanel();
-    // msg.open is set when the background just injected this script: the click
-    // that caused the injection was a request to open, never to close.
-    if (msg.open) openPanel();
-    else if (panelEl.classList.contains("mal-closed")) openPanel();
-    else closePanel();
-    sendResponse({ ok: true });
+    if (!msg || msg.type !== "GET_PAGE_ADS") return false;
+    sendResponse({
+      ok: true,
+      onLibrary: onLibrary(),
+      ads: [...onPage.values()],
+      found: onPage.size,
+      decorated: decoratedCount,
+      matched: [...onPage.keys()].filter((id) => captured.has(id)).length,
+    });
     return false;
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (changes.lists || changes.spaces || changes.settings) refreshTargets();
-    if (changes.ads || changes.lists || changes.spaces) refreshStore();
   });
 })();

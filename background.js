@@ -855,6 +855,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       );
     case "OPEN_LIBRARY":
       return respond(openAdLibrary());
+    case "OPEN_PANEL":
+      return respond(openPanelFor(sender));
     default:
       return false;
   }
@@ -870,7 +872,10 @@ const LIBRARY_URL = "https://www.facebook.com/ads/library/";
 // Focus an existing Ad Library tab if there is one, otherwise open it.
 const openAdLibrary = async () => {
   const tabs = await chrome.tabs.query({
-    url: ["https://www.facebook.com/ads/library*", "https://web.facebook.com/ads/library*"],
+    url: [
+      "https://www.facebook.com/ads/library*",
+      "https://web.facebook.com/ads/library*",
+    ],
   });
   if (tabs.length) {
     await chrome.tabs.update(tabs[0].id, { active: true });
@@ -881,38 +886,35 @@ const openAdLibrary = async () => {
   return { ok: true };
 };
 
-// The toolbar button opens the panel on whatever page is in front, not only on
-// the Ad Library. The content script is declared for the Library and injected
-// on demand everywhere else, so try to talk to it first and only inject when
-// nothing answers. Restricted pages (chrome://, the Web Store, other
-// extensions, the PDF viewer) refuse injection; those fall back to the
-// dashboard, which is the one surface always available.
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab || !tab.id) return;
+/**
+ * sidePanel.open is per-window and wants a user gesture in the extension's own
+ * context. A click relayed from a content script does not always count as one,
+ * and when it does not, Chrome rejects. Rather than leave the caller with a
+ * button that does nothing, fall back to the dashboard, which shows the same
+ * lists and always opens.
+ */
+const openPanelFor = async (sender) => {
+  const windowId = sender && sender.tab ? sender.tab.windowId : undefined;
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: "TOGGLE_PANEL" });
-    return;
+    await chrome.sidePanel.open({ windowId });
+    return { ok: true, where: "panel" };
   } catch (err) {
-    // No content script in this tab yet.
-  }
-  try {
-    await chrome.scripting.insertCSS({
-      target: { tabId: tab.id },
-      files: ["content/content.css"],
+    await chrome.tabs.create({
+      url: chrome.runtime.getURL("dashboard/dashboard.html"),
     });
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["content/content.js"],
-    });
-    await chrome.tabs.sendMessage(tab.id, { type: "TOGGLE_PANEL", open: true });
-    return;
-  } catch (err) {
-    console.warn("[pake-ads] panel injection refused, opening dashboard:", err);
+    return { ok: true, where: "dashboard" };
   }
-  await chrome.tabs.create({
-    url: chrome.runtime.getURL("dashboard/dashboard.html"),
-  });
-});
+};
+
+/**
+ * The toolbar button opens the browser's own side panel, so the workspace is
+ * docked beside the page on every tab rather than injected into one of them.
+ * Chrome handles the open itself, which also means it counts as the user
+ * gesture the sidePanel API requires.
+ */
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((err) => console.warn("[pake-ads] side panel behaviour:", err));
 
 // Keep local state fresh when another device pushes an update.
 chrome.storage.onChanged.addListener((changes, area) => {

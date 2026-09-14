@@ -1,30 +1,53 @@
 /**
- * Light theme. The page plane carries a micro dot texture; every panel sits on
- * flat white above it so the texture reads as paper rather than noise behind
- * content. Chart hues are the validated light categorical steps.
+ * Dashboard, on the same ground as the side panel: the brand ramp
+ * (#070707 -> #4510e8 -> #ed0cdd -> #ffc41d -> #ffffff) pulled into blurred
+ * mesh blobs, covered by a scrim, with every surface above it made of one
+ * translucent material. The dot texture is gone; a mesh ground and a dot grid
+ * fight each other, and the ground is the stronger idea.
+ *
+ * Tokens only below this block: both themes swap here and the whole page
+ * follows.
  */
 
 :root {
-  --plane: #f7f7f5;
-  --dot: rgba(17, 17, 17, 0.09);
-  --panel: #ffffff;
-  --panel-2: #f4f4f2;
-  --border: #e3e3df;
-  --border-strong: #d3d3cd;
-  --text: #16181d;
-  --text-2: #5c5f66;
-  --muted: #8a8d94;
-  --blue: #2a78d6;
-  --blue-soft: #eaf2fd;
-  --green: #1baf7a;
-  --red: #e34948;
-  --radius: 12px;
-  --font: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
-  --shadow: 0 1px 2px rgba(16, 18, 22, 0.06);
-  --nav-active-ink: #17508f;
-  --chip-hot-bg: #fdf4e3;
-  --chip-hot-border: #f0dcae;
-  --chip-hot-ink: #8a6100;
+  --ramp: linear-gradient(
+    168deg,
+    #070707 0%,
+    #4510e8 50%,
+    #ed0cdd 71%,
+    #ffc41d 86%,
+    #ffffff 100%
+  );
+  --scrim: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.66) 45%,
+    rgba(255, 255, 255, 0.76) 100%
+  );
+
+  --plane: transparent;
+  --dot: transparent;
+  --panel: rgba(255, 255, 255, 0.56);
+  --panel-2: rgba(255, 255, 255, 0.38);
+  --border: rgba(255, 255, 255, 0.62);
+  --border-strong: rgba(255, 255, 255, 0.85);
+  --text: rgba(10, 6, 20, 0.94);
+  --text-2: rgba(10, 6, 20, 0.6);
+  --muted: rgba(10, 6, 20, 0.42);
+  --blue: #4510e8;
+  --blue-soft: rgba(69, 16, 232, 0.12);
+  --green: #0f9d63;
+  --red: #d92b4b;
+  --radius: 18px;
+  --font:
+    "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
+    "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 8px 24px rgba(30, 10, 60, 0.1);
+  --nav-active-ink: #2d0b8f;
+  --chip-hot-bg: rgba(255, 196, 29, 0.22);
+  --chip-hot-border: rgba(255, 196, 29, 0.5);
+  --chip-hot-ink: #7a5300;
   color-scheme: light;
 }
 
@@ -36,48 +59,62 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --plane: #0e0f13;
-    --dot: rgba(255, 255, 255, 0.07);
-    --panel: #16181d;
-    --panel-2: #1d2027;
-    --border: #272b34;
-    --border-strong: #343946;
-    --text: #eef0f4;
-    --text-2: #a9aeba;
-    --muted: #7f8693;
-    --blue: #5b9df5;
-    --blue-soft: rgba(91, 157, 245, 0.16);
-    --green: #2fc08c;
-    --red: #f2646f;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --nav-active-ink: #a9cdff;
-    --chip-hot-bg: rgba(201, 133, 0, 0.18);
-    --chip-hot-border: rgba(201, 133, 0, 0.4);
-    --chip-hot-ink: #e8b45c;
+  color-scheme: dark;
+  --scrim: linear-gradient(
+    180deg,
+    rgba(7, 7, 7, 0.84) 0%,
+    rgba(7, 7, 7, 0.66) 45%,
+    rgba(7, 7, 7, 0.82) 100%
+  );
+  --plane: transparent;
+  --dot: transparent;
+  --panel: rgba(255, 255, 255, 0.075);
+  --panel-2: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.15);
+  --border-strong: rgba(255, 255, 255, 0.3);
+  --text: rgba(255, 255, 255, 0.96);
+  --text-2: rgba(255, 255, 255, 0.62);
+  --muted: rgba(255, 255, 255, 0.4);
+  --blue: #9d7bff;
+  --blue-soft: rgba(157, 123, 255, 0.18);
+  --green: #34c759;
+  --red: #ff5f6d;
+  --shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 28px rgba(0, 0, 0, 0.4);
+  --nav-active-ink: #d6c6ff;
+  --chip-hot-bg: rgba(255, 196, 29, 0.18);
+  --chip-hot-border: rgba(255, 196, 29, 0.38);
+  --chip-hot-ink: #ffc41d;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --plane: #0e0f13;
-  --dot: rgba(255, 255, 255, 0.07);
-  --panel: #16181d;
-  --panel-2: #1d2027;
-  --border: #272b34;
-  --border-strong: #343946;
-  --text: #eef0f4;
-  --text-2: #a9aeba;
-  --muted: #7f8693;
-  --blue: #5b9df5;
-  --blue-soft: rgba(91, 157, 245, 0.16);
-  --green: #2fc08c;
-  --red: #f2646f;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --nav-active-ink: #a9cdff;
-  --chip-hot-bg: rgba(201, 133, 0, 0.18);
-  --chip-hot-border: rgba(201, 133, 0, 0.4);
-  --chip-hot-ink: #e8b45c;
+  --scrim: linear-gradient(
+    180deg,
+    rgba(7, 7, 7, 0.84) 0%,
+    rgba(7, 7, 7, 0.66) 45%,
+    rgba(7, 7, 7, 0.82) 100%
+  );
+  --plane: transparent;
+  --dot: transparent;
+  --panel: rgba(255, 255, 255, 0.075);
+  --panel-2: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.15);
+  --border-strong: rgba(255, 255, 255, 0.3);
+  --text: rgba(255, 255, 255, 0.96);
+  --text-2: rgba(255, 255, 255, 0.62);
+  --muted: rgba(255, 255, 255, 0.4);
+  --blue: #9d7bff;
+  --blue-soft: rgba(157, 123, 255, 0.18);
+  --green: #34c759;
+  --red: #ff5f6d;
+  --shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 28px rgba(0, 0, 0, 0.4);
+  --nav-active-ink: #d6c6ff;
+  --chip-hot-bg: rgba(255, 196, 29, 0.18);
+  --chip-hot-border: rgba(255, 196, 29, 0.38);
+  --chip-hot-ink: #ffc41d;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -127,11 +164,65 @@ body {
   font: 400 14px/1.5 var(--font);
   letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
-  /* The micro dot texture: a 1px dot on a 14px grid over the page plane. */
-  background-color: var(--plane);
-  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-  background-size: 14px 14px;
-  background-position: -1px -1px;
+  background: #070707;
+  isolation: isolate;
+}
+
+/* The mesh ground, behind everything. Oversized and blurred so the blobs
+   bleed past every edge instead of leaving a pale rim at the viewport. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -2;
+  pointer-events: none;
+}
+
+body::before {
+  inset: -25%;
+  background-color: #070707;
+  background-image:
+    radial-gradient(
+      26% 22% at 76% 14%,
+      rgba(69, 16, 232, 0.95) 0%,
+      rgba(69, 16, 232, 0) 100%
+    ),
+    radial-gradient(
+      30% 26% at 16% 44%,
+      rgba(69, 16, 232, 0.7) 0%,
+      rgba(69, 16, 232, 0) 100%
+    ),
+    radial-gradient(
+      28% 22% at 84% 60%,
+      rgba(237, 12, 221, 0.8) 0%,
+      rgba(237, 12, 221, 0) 100%
+    ),
+    radial-gradient(
+      24% 18% at 28% 76%,
+      rgba(237, 12, 221, 0.5) 0%,
+      rgba(237, 12, 221, 0) 100%
+    ),
+    radial-gradient(
+      26% 18% at 68% 88%,
+      rgba(255, 196, 29, 0.72) 0%,
+      rgba(255, 196, 29, 0) 100%
+    ),
+    radial-gradient(
+      22% 14% at 40% 98%,
+      rgba(255, 255, 255, 0.85) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    var(--ramp);
+  filter: blur(60px) saturate(125%);
+}
+
+body::after {
+  inset: 0;
+  z-index: -1;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.34'/%3E%3C/svg%3E")
+      0 0 / 180px 180px,
+    var(--scrim);
 }
 
 a {
@@ -1045,5 +1136,138 @@ select:focus {
 
   #main {
     padding: 16px;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   Material
+
+   Every surface painted with --panel is translucent now, so each one needs
+   the blur that turns translucency into glass. Grouped here rather than
+   repeated inline: it is one material, defined once.
+   --------------------------------------------------------------------- */
+
+#sidebar,
+#topbar,
+.stats > *,
+.metrics,
+.bulkbar,
+.card,
+.modal-card,
+.btn {
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+}
+
+/* Response on press, not on release. */
+.btn,
+.nav-item {
+  transition:
+    transform 110ms ease-out,
+    background-color 140ms ease,
+    filter 140ms ease;
+}
+
+.btn:active:not(:disabled),
+.nav-item:active {
+  transform: scale(0.975);
+}
+
+/* Type: tracking is size-specific, so headings tighten and body sits near 0. */
+h1,
+h2,
+.card-title,
+.stat-value,
+.brand-name {
+  letter-spacing: -0.022em;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  body::before {
+    filter: none;
+  }
+  #sidebar,
+  #topbar,
+  .stats > *,
+  .metrics,
+  .bulkbar,
+  .card,
+  .modal-card,
+  .btn {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(20, 18, 30, 0.95);
+  }
+  :root[data-theme="light"] #sidebar,
+  :root[data-theme="light"] .card,
+  :root[data-theme="light"] .modal-card {
+    background: rgba(255, 255, 255, 0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled),
+  .nav-item:active {
+    transform: none;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   Corrections after the palette change
+
+   Three things that were tuned for flat white panels and read wrong on a
+   mesh ground.
+   --------------------------------------------------------------------- */
+
+/* A saturated green next to the ramp's violet and magenta is the one colour
+   in the palette that belongs to nothing. Download is not a semantic-colour
+   action; it is just the primary action on a card. */
+.btn-green {
+  background: rgba(69, 16, 232, 0.8);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.btn-green:hover:not(:disabled) {
+  background: rgba(69, 16, 232, 0.95);
+}
+
+/* The default checkbox paints its own opaque box, which reads as a hole
+   punched in the creative. Make it the same material as everything else. */
+.card-check {
+  appearance: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px) saturate(180%);
+  -webkit-backdrop-filter: blur(10px) saturate(180%);
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+  transition: background-color 140ms ease;
+}
+
+.card-check:checked {
+  background: rgba(69, 16, 232, 0.9);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.card-check:checked::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border: 2px solid #fff;
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  body::after {
+    background-image: none;
   }
 }

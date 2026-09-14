@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ads Saver</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <div class="mesh" aria-hidden="true"></div>
+    <div class="mesh-scrim" aria-hidden="true"></div>
+
+    <div id="app">
+      <header class="bubble head">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+          <defs>
+            <linearGradient id="markGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#4510e8" />
+              <stop offset="0.6" stop-color="#ed0cdd" />
+              <stop offset="1" stop-color="#ffc41d" />
+            </linearGradient>
+          </defs>
+          <rect
+            x="1"
+            y="7"
+            width="8.5"
+            height="10"
+            rx="2"
+            fill="url(#markGrad)"
+            opacity=".3"
+          />
+          <rect
+            x="6"
+            y="5"
+            width="9.5"
+            height="14"
+            rx="2.2"
+            fill="url(#markGrad)"
+            opacity=".55"
+          />
+          <rect
+            x="12"
+            y="3"
+            width="11"
+            height="18"
+            rx="2.6"
+            fill="url(#markGrad)"
+          />
+        </svg>
+        <div>
+          <div class="head-title">Ads Saver</div>
+          <div class="head-sub" id="head-sub">Meta Ad Library</div>
+        </div>
+      </header>
+
+      <nav class="bubble tabs" id="tabs" role="tablist"></nav>
+
+      <div class="view" id="view" role="tabpanel"></div>
+
+      <footer class="foot">
+        <button type="button" class="btn btn-accent" id="btn-library" hidden>
+          Go to Ad Library
+        </button>
+        <button type="button" class="btn" id="btn-dash">
+          Open full dashboard
+        </button>
+      </footer>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="panel.js"></script>
+  </body>
+</html>

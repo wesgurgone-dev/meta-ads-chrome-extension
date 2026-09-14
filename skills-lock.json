@@ -259,6 +259,12 @@
       "skillPath": "agent-skills/web-design/build-wireframe-scan-reveal/SKILL.md",
       "computedHash": "bd41640e7b19b1215f64760caf1958691c1bb7f5157310a20dac4921a1c5f9a7"
     },
+    "chrome-extensions": {
+      "source": "GoogleChrome/modern-web-guidance",
+      "sourceType": "github",
+      "skillPath": "skills/chrome-extensions/SKILL.md",
+      "computedHash": "1e8525bb49647008dcd3a6b7e5d3c3207345f086e7a64d7e6d5bcc67dbba7a71"
+    },
     "cinematic-gsap-lenis-motion-system": {
       "source": "MengTo/Skills",
       "sourceType": "github",
@@ -564,6 +570,12 @@
       "sourceType": "github",
       "skillPath": "agent-skills/web-design/mesh-gradient-dark-blue-clean/SKILL.md",
       "computedHash": "0996bd0aae284801e4a8df33630da441c58ef830cc321f81090214f54db2c989"
+    },
+    "modern-web-guidance": {
+      "source": "GoogleChrome/modern-web-guidance",
+      "sourceType": "github",
+      "skillPath": "skills/modern-web-guidance/SKILL.md",
+      "computedHash": "da9b9c833351f0575ca7482f3c8decc8e24b02b76dea71f138738283c701b4c5"
     },
     "nested-container-clean-agency": {
       "source": "MengTo/Skills",
