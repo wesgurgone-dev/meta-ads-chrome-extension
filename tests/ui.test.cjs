@@ -112,22 +112,32 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
     };
   });
   ok(refract.count >= 4, `${refract.count} glass surfaces`);
-  ok(refract.renderers.join() === 'sdf-svg', `all on the SDF renderer (${refract.renderers.join()})`);
-  ok(refract.reasons.join() === 'explicit',
-     `chosen explicitly, not fallen back to (${refract.reasons.join()})`);
-  ok(refract.displacementMaps >= refract.count,
-     `${refract.displacementMaps} displacement maps for ${refract.count} surfaces`);
-  ok(refract.filtered === refract.count, 'every surface carries its filter');
-  ok(refract.lensesEmpty, 'every lens is empty, so no text is displaced');
+  // Refraction is opt-in: measured in Chromium it replaces the backdrop with a
+  // flat grey rather than bending it. See src/surface.jsx for the A/B.
+  ok(refract.renderers.join() === 'css', `surfaces default to the CSS material (${refract.renderers.join()})`);
+  ok(refract.filtered === 0, 'no surface carries an SVG filter by default');
+  ok(refract.lensesEmpty, 'every lens is empty, so no content can be displaced');
   ok(refract.tones.length === 1, `one tone across the panel (${refract.tones.join()})`);
 
-  console.log('--- ground is a dot grid, not a gradient ---');
-  const ground = await panel.evaluate(() => {
-    const cs = getComputedStyle(document.body);
-    return { image: cs.backgroundImage, size: cs.backgroundSize };
+  console.log('--- topo ground, and the theme is always resolved ---');
+  const ground = await panel.evaluate(() => ({
+    image: getComputedStyle(document.body).backgroundImage,
+    topo: document.body.classList.contains('topo'),
+    theme: document.documentElement.dataset.theme,
+  }));
+  ok(ground.topo && /repeating-radial-gradient/.test(ground.image), 'contour lines behind everything');
+  // "system" used to leave the attribute unset, which left the page stylesheet
+  // on its dark default while the library resolved the material to light.
+  ok(['dark', 'light'].includes(ground.theme), `theme resolved to ${ground.theme}, never left unset`);
+
+  console.log('--- secondary text stays readable on the material ---');
+  const muted = await panel.evaluate(() => {
+    const el = document.querySelector('.ogui-stat') || document.querySelector('.stat-label');
+    if (!el) return null;
+    const m = getComputedStyle(el).color.match(/[\d.]+/g);
+    return m ? m.map(Number) : null;
   });
-  ok(/radial-gradient/.test(ground.image) && /14px/.test(ground.size), `dot grid (${ground.size})`);
-  ok(!/#4510e8|rgb\(69, 16, 232\)/.test(ground.image), 'no brand ramp on the ground');
+  ok(muted !== null, 'a stat label is on screen to measure');
 
   console.log('--- views switch ---');
   for (const [view, needle] of [['saved', 'saved in this space'], ['lists', 'Lists in this space'], ['account', 'Space']]) {
@@ -162,7 +172,7 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(layout.sideBeside, `sidebar and main sit side by side (sidebar ${layout.sideWidth}px)`);
   ok(layout.stats === 6, `six stat tiles (${layout.stats})`);
   ok(layout.navItems >= 1, `${layout.navItems} nav items`);
-  ok(layout.sdf.join() === 'sdf-svg', 'dashboard surfaces refract too');
+  ok(layout.sdf.join() === 'css', 'dashboard surfaces use the same CSS material as the panel');
   ok(layout.empty, 'empty state renders when nothing is saved');
 
   console.log('--- filters and export are wired ---');

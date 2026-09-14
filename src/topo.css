@@ -1,0 +1,53 @@
+/**
+ * Topo ground.
+ *
+ * Concentric contour lines from two off-centre origins, the way a relief map
+ * reads. It replaces the dot grid for one practical reason as much as a visual
+ * one: refraction can only show where there is something behind worth bending,
+ * and a field of fine lines gives the lens edges something to distort. A flat
+ * ground made the same filter look like nothing but a coloured rim.
+ *
+ * Pure CSS, no asset, and it costs one paint.
+ */
+
+:root {
+  --topo-ink: #06100f;
+  --topo-line: rgba(120, 230, 210, 0.11);
+  --topo-line-soft: rgba(120, 200, 230, 0.07);
+  --topo-glow: rgba(28, 90, 84, 0.55);
+}
+
+:root[data-theme="light"] {
+  --topo-ink: #eef1f0;
+  --topo-line: rgba(16, 60, 58, 0.1);
+  --topo-line-soft: rgba(20, 50, 80, 0.07);
+  --topo-glow: rgba(190, 214, 210, 0.7);
+}
+
+.topo {
+  background-color: var(--topo-ink);
+  background-image:
+    /* A soft lift under the contours so the field is not flat. */
+    radial-gradient(
+      120% 90% at 78% 18%,
+      var(--topo-glow) 0%,
+      transparent 62%
+    ),
+    repeating-radial-gradient(
+      circle at 76% 22%,
+      transparent 0 27px,
+      var(--topo-line) 27px 28px
+    ),
+    repeating-radial-gradient(
+      circle at 18% 78%,
+      transparent 0 34px,
+      var(--topo-line-soft) 34px 35px
+    );
+  background-attachment: fixed;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .topo {
+    background-image: none;
+  }
+}

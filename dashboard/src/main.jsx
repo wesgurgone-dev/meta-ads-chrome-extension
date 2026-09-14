@@ -676,11 +676,12 @@ const App = () => {
       typeof matchMedia === "function" &&
       matchMedia("(prefers-color-scheme: dark)").matches);
 
+  // Stamp the resolved appearance, never "system" and never nothing: the page
+  // stylesheet keys off this attribute, so leaving it unset left the ground on
+  // its dark default while the library resolved the material to light.
   useEffect(() => {
-    if (!state.settings.theme || state.settings.theme === "system")
-      delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = state.settings.theme;
-  }, [state.settings.theme]);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  }, [dark]);
 
   const lists = spaceLists(state);
   const space = state.spaces[state.settings.activeSpaceId] || null;
@@ -760,7 +761,11 @@ const App = () => {
     <GlassSystemProvider
       renderer="auto"
       toasts={false}
-      theme={{ appearance: dark ? "dark" : "light", className: "app-shell" }}
+      theme={{
+        appearance: dark ? "dark" : "light",
+        className: "app-shell",
+        theme: { accent: "#4510e8", radius: "soft" },
+      }}
     >
       <Surface id="sidebar" className="sidebar" material="regular">
         <div className="brand">

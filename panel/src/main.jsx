@@ -440,7 +440,11 @@ const App = () => {
     <GlassSystemProvider
       renderer="auto"
       toasts={false}
-      theme={{ appearance: dark ? "dark" : "light", className: "app-shell" }}
+      theme={{
+        appearance: dark ? "dark" : "light",
+        className: "app-shell",
+        theme: { accent: "#4510e8", radius: "soft" },
+      }}
     >
       <div id="app">
         <Surface material="regular" className="head">

@@ -56,11 +56,6 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
-  /* The micro dot texture: a 1px dot on a 14px grid over the panel plane. */
-  background-color: var(--plane);
-  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-  background-size: 14px 14px;
-  background-position: -1px -1px;
 }
 
 #app {
@@ -487,4 +482,29 @@ select.field option {
 
 .surface {
   box-shadow: 0 2px 10px rgba(10, 6, 24, 0.1);
+}
+
+/* Clip the lens to the surface. The displacement map reaches past the element
+   (its filter region is 136% of the box), so an unclipped lens paints a
+   second, offset rim outside the shape. */
+.surface {
+  overflow: hidden;
+}
+
+/* The library's muted token is tuned for text on its own canvas. Over our
+   material it drops below a readable contrast, most visibly on the small
+   uppercase stat labels, so lift the secondary text a step. */
+:root {
+  --ogui-color-muted: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="light"] {
+  --ogui-color-muted: rgba(10, 6, 20, 0.66);
+}
+
+.ogui-stat [class*="label"],
+.stat-label,
+.stat-note {
+  color: var(--ogui-material-text, currentColor);
+  opacity: 0.72;
 }
