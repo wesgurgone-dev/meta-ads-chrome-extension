@@ -27,12 +27,21 @@
 
   --plane: transparent;
   --dot: transparent;
-  --panel: rgba(255, 255, 255, 0.24);
+  /* Surfaces come from OpenGlass UI's material; these are the mappings onto
+     it, so the dashboard and the side panel are made of the same glass. */
+  --ogui-color-text: rgba(10, 6, 20, 0.94);
+  --ogui-color-muted: rgba(10, 6, 20, 0.62);
+  --ogui-color-accent: #4510e8;
+  --ogui-color-accent-ink: #ffffff;
+  --ogui-radius-surface: 18px;
+  --ogui-radius-control: 12px;
+
+  --panel: var(--ogui-material-background);
   --panel-2: rgba(255, 255, 255, 0.14);
-  --border: rgba(255, 255, 255, 0.62);
-  --border-strong: rgba(255, 255, 255, 0.85);
-  --text: rgba(10, 6, 20, 0.94);
-  --text-2: rgba(10, 6, 20, 0.6);
+  --border: var(--ogui-material-border);
+  --border-strong: var(--ogui-material-highlight);
+  --text: var(--ogui-material-text);
+  --text-2: var(--ogui-material-muted);
   --muted: rgba(10, 6, 20, 0.42);
   --blue: #4510e8;
   --blue-soft: rgba(69, 16, 232, 0.12);
@@ -42,8 +51,7 @@
   --font:
     "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
     "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 10px rgba(30, 10, 60, 0.06);
+  --shadow: var(--ogui-material-shadow);
   --nav-active-ink: #2d0b8f;
   --chip-hot-bg: rgba(255, 196, 29, 0.22);
   --chip-hot-border: rgba(255, 196, 29, 0.5);
@@ -68,19 +76,20 @@
   );
   --plane: transparent;
   --dot: transparent;
-  --panel: rgba(255, 255, 255, 0.05);
+  --ogui-color-text: rgba(255, 255, 255, 0.96);
+  --ogui-color-muted: rgba(255, 255, 255, 0.66);
+  --panel: var(--ogui-material-background);
   --panel-2: rgba(255, 255, 255, 0.03);
-  --border: rgba(255, 255, 255, 0.15);
-  --border-strong: rgba(255, 255, 255, 0.3);
-  --text: rgba(255, 255, 255, 0.96);
-  --text-2: rgba(255, 255, 255, 0.62);
+  --border: var(--ogui-material-border);
+  --border-strong: var(--ogui-material-highlight);
+  --text: var(--ogui-material-text);
+  --text-2: var(--ogui-material-muted);
   --muted: rgba(255, 255, 255, 0.4);
   --blue: #9d7bff;
   --blue-soft: rgba(157, 123, 255, 0.18);
   --green: #34c759;
   --red: #ff5f6d;
-  --shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 10px rgba(0, 0, 0, 0.16);
+  --shadow: var(--ogui-material-shadow);
   --nav-active-ink: #d6c6ff;
   --chip-hot-bg: rgba(255, 196, 29, 0.18);
   --chip-hot-border: rgba(255, 196, 29, 0.38);
@@ -98,19 +107,20 @@
   );
   --plane: transparent;
   --dot: transparent;
-  --panel: rgba(255, 255, 255, 0.05);
+  --ogui-color-text: rgba(255, 255, 255, 0.96);
+  --ogui-color-muted: rgba(255, 255, 255, 0.66);
+  --panel: var(--ogui-material-background);
   --panel-2: rgba(255, 255, 255, 0.03);
-  --border: rgba(255, 255, 255, 0.15);
-  --border-strong: rgba(255, 255, 255, 0.3);
-  --text: rgba(255, 255, 255, 0.96);
-  --text-2: rgba(255, 255, 255, 0.62);
+  --border: var(--ogui-material-border);
+  --border-strong: var(--ogui-material-highlight);
+  --text: var(--ogui-material-text);
+  --text-2: var(--ogui-material-muted);
   --muted: rgba(255, 255, 255, 0.4);
   --blue: #9d7bff;
   --blue-soft: rgba(157, 123, 255, 0.18);
   --green: #34c759;
   --red: #ff5f6d;
-  --shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 10px rgba(0, 0, 0, 0.16);
+  --shadow: var(--ogui-material-shadow);
   --nav-active-ink: #d6c6ff;
   --chip-hot-bg: rgba(255, 196, 29, 0.18);
   --chip-hot-border: rgba(255, 196, 29, 0.38);
@@ -1175,8 +1185,8 @@ select:focus {
 .card,
 .modal-card,
 .btn {
-  backdrop-filter: blur(42px) saturate(200%);
-  -webkit-backdrop-filter: blur(42px) saturate(200%);
+  backdrop-filter: var(--ogui-material-filter);
+  -webkit-backdrop-filter: var(--ogui-material-filter);
 }
 
 /* Response on press, not on release. */

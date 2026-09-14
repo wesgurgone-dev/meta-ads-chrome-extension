@@ -67,6 +67,14 @@
     const theme = (state.settings || {}).theme || "system";
     if (theme === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = theme;
+    // OpenGlass UI picks its material by tone, so resolve "system" here rather
+    // than leaving the material unset when the user has made no choice.
+    const dark =
+      theme === "dark" ||
+      (theme === "system" &&
+        typeof matchMedia === "function" &&
+        matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.oguiTone = dark ? "dark" : "light";
   };
 
   const activeSpaceId = () => state.settings.activeSpaceId;

@@ -1,0 +1,180 @@
+/**
+ * OpenGlass UI material, as CSS.
+ *
+ * Generated from open-glass-ui's own renderer (packages/renderers/src/css.ts,
+ * createCssMaterialTokens) so the values are the library's, not a hand
+ * transcription of them. The React <Glass> component stamps the same
+ * data-ogui-* attributes and sets these same custom properties inline; this
+ * file does it in a stylesheet instead, because this extension ships no React
+ * and no bundler.
+ *
+ * MIT, (c) 2026 Moe Luker. See LICENSE beside this file.
+ * https://github.com/moekoelueker/open-glass-ui
+ *
+ * Do not edit by hand: regenerate with vendor/open-glass-ui/regenerate.md.
+ */
+
+[data-ogui-glass] {
+  position: relative;
+  color: var(--ogui-material-text);
+  background: var(--ogui-material-background);
+  border: 1px solid var(--ogui-material-border);
+  box-shadow: var(--ogui-material-shadow);
+  backdrop-filter: var(--ogui-material-filter);
+  -webkit-backdrop-filter: var(--ogui-material-filter);
+}
+
+/* The specular edge: light catching the top of a curved surface. Sits behind
+   content, which an absolutely positioned ::before otherwise would not. */
+[data-ogui-glass]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ogui-material-highlight) 26%, transparent) 0%,
+    transparent 42%
+  );
+}
+
+[data-ogui-glass] > * {
+  position: relative;
+  z-index: 1;
+}
+
+:root[data-ogui-tone="dark"] {
+  --ogui-material-background: rgb(12 18 21 / 0.30);
+  --ogui-material-border: rgb(255 255 255 / 0.28);
+  --ogui-material-highlight: rgb(255 255 255 / 0.72);
+  --ogui-material-shadow: 0 20px 58px rgb(0 0 0 / 0.36);
+  --ogui-material-text: var(--ogui-color-text, #f7f6f0);
+  --ogui-material-muted: var(--ogui-color-muted, #c9cbc7);
+  --ogui-material-filter: blur(10px) saturate(1.18) brightness(1.04);
+  --ogui-material-dim: rgb(0 0 0 / 0.18);
+}
+
+:root[data-ogui-tone="light"] {
+  --ogui-material-background: rgb(255 252 244 / 0.24);
+  --ogui-material-border: rgb(255 255 255 / 0.7);
+  --ogui-material-highlight: rgb(255 255 255 / 0.72);
+  --ogui-material-shadow: 0 20px 58px rgb(30 39 44 / 0.15);
+  --ogui-material-text: var(--ogui-color-text, #101418);
+  --ogui-material-muted: var(--ogui-color-muted, #424a50);
+  --ogui-material-filter: blur(10px) saturate(1.18) brightness(1.04);
+  --ogui-material-dim: rgb(255 255 255 / 0.18);
+}
+
+[data-ogui-glass][data-ogui-material="clear"][data-ogui-tone="dark"] {
+  --ogui-material-background: rgb(12 18 21 / 0.30);
+  --ogui-material-border: rgb(255 255 255 / 0.28);
+  --ogui-material-highlight: rgb(255 255 255 / 0.72);
+  --ogui-material-shadow: 0 20px 58px rgb(0 0 0 / 0.36);
+  --ogui-material-text: var(--ogui-color-text, #f7f6f0);
+  --ogui-material-muted: var(--ogui-color-muted, #c9cbc7);
+  --ogui-material-filter: blur(10px) saturate(1.18) brightness(1.04);
+  --ogui-material-dim: rgb(0 0 0 / 0.18);
+}
+
+[data-ogui-glass][data-ogui-material="regular"][data-ogui-tone="dark"] {
+  --ogui-material-background: rgb(18 24 28 / 0.58);
+  --ogui-material-border: rgb(255 255 255 / 0.24);
+  --ogui-material-highlight: rgb(255 255 255 / 0.62);
+  --ogui-material-shadow: 0 22px 64px rgb(0 0 0 / 0.40);
+  --ogui-material-text: var(--ogui-color-text, #f7f6f0);
+  --ogui-material-muted: var(--ogui-color-muted, #c9cbc7);
+  --ogui-material-filter: blur(22px) saturate(1.22) brightness(1.02);
+  --ogui-material-dim: rgb(0 0 0 / 0.28);
+}
+
+[data-ogui-glass][data-ogui-material="frosted"][data-ogui-tone="dark"] {
+  --ogui-material-background: rgb(26 31 34 / 0.72);
+  --ogui-material-border: rgb(255 255 255 / 0.2);
+  --ogui-material-highlight: rgb(255 255 255 / 0.48);
+  --ogui-material-shadow: 0 24px 72px rgb(0 0 0 / 0.46);
+  --ogui-material-text: var(--ogui-color-text, #f7f6f0);
+  --ogui-material-muted: var(--ogui-color-muted, #c9cbc7);
+  --ogui-material-filter: blur(34px) saturate(1.08) brightness(1.05);
+  --ogui-material-dim: rgb(0 0 0 / 0.34);
+}
+
+[data-ogui-glass][data-ogui-material="clear"][data-ogui-tone="light"] {
+  --ogui-material-background: rgb(255 252 244 / 0.24);
+  --ogui-material-border: rgb(255 255 255 / 0.7);
+  --ogui-material-highlight: rgb(255 255 255 / 0.72);
+  --ogui-material-shadow: 0 20px 58px rgb(30 39 44 / 0.15);
+  --ogui-material-text: var(--ogui-color-text, #101418);
+  --ogui-material-muted: var(--ogui-color-muted, #424a50);
+  --ogui-material-filter: blur(10px) saturate(1.18) brightness(1.04);
+  --ogui-material-dim: rgb(255 255 255 / 0.18);
+}
+
+[data-ogui-glass][data-ogui-material="regular"][data-ogui-tone="light"] {
+  --ogui-material-background: rgb(249 247 240 / 0.58);
+  --ogui-material-border: rgb(255 255 255 / 0.84);
+  --ogui-material-highlight: rgb(255 255 255 / 0.62);
+  --ogui-material-shadow: 0 22px 64px rgb(25 35 40 / 0.16);
+  --ogui-material-text: var(--ogui-color-text, #101418);
+  --ogui-material-muted: var(--ogui-color-muted, #424a50);
+  --ogui-material-filter: blur(22px) saturate(1.22) brightness(1.02);
+  --ogui-material-dim: rgb(255 255 255 / 0.34);
+}
+
+[data-ogui-glass][data-ogui-material="frosted"][data-ogui-tone="light"] {
+  --ogui-material-background: rgb(247 244 236 / 0.76);
+  --ogui-material-border: rgb(255 255 255 / 0.9);
+  --ogui-material-highlight: rgb(255 255 255 / 0.48);
+  --ogui-material-shadow: 0 24px 72px rgb(25 35 40 / 0.18);
+  --ogui-material-text: var(--ogui-color-text, #101418);
+  --ogui-material-muted: var(--ogui-color-muted, #424a50);
+  --ogui-material-filter: blur(34px) saturate(1.08) brightness(1.05);
+  --ogui-material-dim: rgb(255 255 255 / 0.48);
+}
+
+/* The library drops translucency entirely rather than thinning it. */
+@media (prefers-reduced-transparency: reduce) {
+  [data-ogui-glass][data-ogui-tone="dark"] {
+    --ogui-material-background: #15191c;
+    --ogui-material-border: #6f777c;
+    --ogui-material-highlight: #ffffff;
+    --ogui-material-shadow: 0 18px 48px rgb(0 0 0 / 0.44);
+    --ogui-material-text: var(--ogui-color-text, #f7f6f0);
+    --ogui-material-muted: var(--ogui-color-muted, #c9cbc7);
+    --ogui-material-filter: none;
+    --ogui-material-dim: rgb(0 0 0 / 0.34);
+  }
+
+  [data-ogui-glass][data-ogui-tone="light"] {
+    --ogui-material-background: #f5f2e9;
+    --ogui-material-border: #596269;
+    --ogui-material-highlight: #ffffff;
+    --ogui-material-shadow: 0 18px 48px rgb(24 31 36 / 0.18);
+    --ogui-material-text: var(--ogui-color-text, #101418);
+    --ogui-material-muted: var(--ogui-color-muted, #424a50);
+    --ogui-material-filter: none;
+    --ogui-material-dim: rgb(255 255 255 / 0.42);
+  }
+
+  [data-ogui-glass]::before {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-ogui-glass] {
+    --ogui-material-background: Canvas;
+    --ogui-material-border: CanvasText;
+    --ogui-material-highlight: Highlight;
+    --ogui-material-shadow: none;
+    --ogui-material-text: CanvasText;
+    --ogui-material-muted: CanvasText;
+    --ogui-material-filter: none;
+    --ogui-material-dim: transparent;
+  }
+  [data-ogui-glass]::before {
+    display: none;
+  }
+}
+

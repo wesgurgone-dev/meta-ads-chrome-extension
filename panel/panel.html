@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ads Saver</title>
+    <!-- OpenGlass UI: the recipe stylesheet once, then the material. Both are
+         vendored because MV3 forbids remote code and this extension has no
+         bundler. panel.css comes last and only adds layout. -->
+    <link rel="stylesheet" href="../vendor/open-glass-ui/styles.css" />
+    <link rel="stylesheet" href="../vendor/open-glass-ui/material.css" />
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
@@ -11,7 +16,7 @@
     <div class="mesh-scrim" aria-hidden="true"></div>
 
     <div id="app">
-      <header class="bubble head">
+      <header class="bubble head" data-ogui-glass data-ogui-material="regular">
         <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
           <defs>
             <linearGradient id="markGrad" x1="0" y1="0" x2="1" y2="1">
@@ -28,24 +33,33 @@
           <div class="head-title">Ads Saver</div>
           <div class="head-sub" id="head-sub">Meta Ad Library</div>
         </div>
-        <div class="seg" id="space-seg" role="tablist" aria-label="Library"></div>
+        <div class="ogui-segments" id="space-seg" role="group" aria-label="Library"></div>
       </header>
 
-      <nav class="bubble tabs" id="tabs" role="tablist"></nav>
+      <nav class="ogui-segments" id="tabs" role="tablist" aria-label="Views"></nav>
 
       <div class="view" id="view" role="tabpanel"></div>
 
       <footer class="foot">
-        <button type="button" class="btn btn-accent" id="btn-library" hidden>
+        <button
+          type="button"
+          class="ogui-button ogui-button--primary ogui-control--medium"
+          id="btn-library"
+          hidden
+        >
           Go to Ad Library
         </button>
-        <button type="button" class="btn" id="btn-dash">
+        <button
+          type="button"
+          class="ogui-button ogui-control--medium"
+          id="btn-dash"
+        >
           Open full dashboard
         </button>
       </footer>
     </div>
 
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="toast ogui-toast" id="toast" role="status" aria-live="polite" data-ogui-glass data-ogui-material="frosted"></div>
 
     <script src="panel.js"></script>
   </body>

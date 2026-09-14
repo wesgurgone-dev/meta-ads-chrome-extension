@@ -25,15 +25,21 @@
     "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
     "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
 
-  --text: rgba(255, 255, 255, 0.96);
-  --text-dim: rgba(255, 255, 255, 0.76);
-  --text-faint: rgba(255, 255, 255, 0.6);
+  /* OpenGlass UI reads these; the material and all forty recipes derive from
+     them, so the brand palette goes in here rather than into each rule. */
+  --ogui-color-text: rgba(255, 255, 255, 0.96);
+  --ogui-color-muted: rgba(255, 255, 255, 0.66);
+  --ogui-color-accent: #4510e8;
+  --ogui-color-accent-ink: #ffffff;
+  --ogui-color-focus: rgba(255, 255, 255, 0.9);
+  --ogui-radius-surface: 18px;
+  --ogui-radius-control: 12px;
 
-  /* One material, three weights. Bigger surfaces read as thicker glass. */
-  --glass: rgba(12, 8, 30, 0.14);
-  --glass-strong: rgba(12, 8, 30, 0.24);
-  --edge: rgba(255, 255, 255, 0.16);
-  --edge-bright: rgba(255, 255, 255, 0.34);
+  --text: var(--ogui-material-text, rgba(255, 255, 255, 0.96));
+  --text-dim: var(--ogui-material-muted, rgba(255, 255, 255, 0.76));
+  --text-faint: rgba(255, 255, 255, 0.6);
+  --edge: var(--ogui-material-border, rgba(255, 255, 255, 0.16));
+  --edge-bright: var(--ogui-material-highlight, rgba(255, 255, 255, 0.34));
 
   --r-lg: 24px;
   --r-md: 18px;
@@ -50,14 +56,10 @@
 /* Light keeps the same ramp and lets the pale end of it carry the panel. */
 :root[data-theme="light"] {
   /* Dark type on pale glass needs no shadow; it only muddies it. */
-  --text: rgba(10, 6, 20, 0.94);
-  --text-dim: rgba(10, 6, 20, 0.72);
+  --ogui-color-text: rgba(10, 6, 20, 0.94);
+  --ogui-color-muted: rgba(10, 6, 20, 0.62);
+  --ogui-color-focus: rgba(69, 16, 232, 0.9);
   --text-faint: rgba(10, 6, 20, 0.54);
-  --text-shadow: none;
-  --glass: rgba(255, 255, 255, 0.26);
-  --glass-strong: rgba(255, 255, 255, 0.4);
-  --edge: rgba(255, 255, 255, 0.72);
-  --edge-bright: rgba(255, 255, 255, 0.95);
   --scrim: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.8) 0%,
@@ -196,41 +198,13 @@ body {
   gap: 12px;
 }
 
-/* One bubble treatment, used by everything. The ::before is the specular
-   highlight: light hitting the top-left of a curved surface. */
+/* Shape and clipping only. Colour, blur, border, shadow and the specular edge
+   all come from [data-ogui-glass] in vendor/open-glass-ui/material.css. */
 .bubble {
-  position: relative;
-  border-radius: var(--r-md);
-  background: var(--glass);
-  backdrop-filter: blur(42px) saturate(200%);
-  -webkit-backdrop-filter: blur(42px) saturate(200%);
-  border: 1px solid var(--edge);
-  box-shadow:
-    inset 0 1px 0 var(--edge-bright),
-    0 2px 10px rgba(0, 0, 0, 0.1);
+  border-radius: var(--ogui-radius-surface);
   overflow: hidden;
 }
 
-.bubble::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.22) 0%,
-    rgba(255, 255, 255, 0) 46%
-  );
-  pointer-events: none;
-  /* An absolutely positioned ::before paints above static children, so
-     without this the sheen sits on top of the text. */
-  z-index: 0;
-}
-
-.bubble > * {
-  position: relative;
-  z-index: 1;
-}
 
 /* ---------- header ---------- */
 
@@ -266,54 +240,26 @@ body {
   flex: 1;
 }
 
-/* ---------- segmented control ---------- */
+/* ---------- navigation ---------- */
 
-.tabs {
-  /* No drop shadow at all: this one sits directly above the scrolling view and
-     any spread at all darkens the first thing in it. */
-  box-shadow: inset 0 1px 0 var(--edge-bright);
+#tabs {
   display: flex;
-  padding: 4px;
-  gap: 3px;
-  border-radius: 15px;
+  width: 100%;
   flex: 0 0 auto;
 }
 
-.tab {
+#tabs .ogui-segments__item {
   flex: 1;
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--text-dim);
-  font: 500 12.5px/1 var(--font);
-  letter-spacing: -0.008em;
-  padding: 9px 4px;
-  border-radius: 11px;
-  cursor: pointer;
-  display: flex;
   flex-direction: column;
-  align-items: center;
+  justify-content: center;
   gap: 4px;
-  /* Response lives on the press, not the release. */
-  transition:
-    color 140ms ease,
-    transform 110ms ease-out;
+  font-size: 11.5px;
 }
 
-.tab svg {
+#tabs svg {
   width: 17px;
   height: 17px;
   fill: currentColor;
-}
-
-.tab:active {
-  transform: scale(0.96);
-}
-
-.tab[aria-selected="true"] {
-  color: var(--text);
-  background: var(--glass-strong);
-  box-shadow: inset 0 1px 0 var(--edge-bright);
 }
 
 /* ---------- scrolling body ---------- */
@@ -382,9 +328,9 @@ body {
   color: var(--text-dim);
   padding: 5px 10px;
   border-radius: 8px;
-  background: var(--glass);
-  backdrop-filter: blur(34px) saturate(200%);
-  -webkit-backdrop-filter: blur(34px) saturate(200%);
+  background: var(--ogui-material-background);
+  backdrop-filter: var(--ogui-material-filter);
+  -webkit-backdrop-filter: var(--ogui-material-filter);
 }
 
 .empty {
@@ -392,62 +338,20 @@ body {
   color: var(--text-dim);
   padding: 12px 14px;
   border-radius: var(--r-sm);
-  background: var(--glass);
-  backdrop-filter: blur(34px) saturate(200%);
-  -webkit-backdrop-filter: blur(34px) saturate(200%);
-  border: 1px solid var(--edge);
+  background: var(--ogui-material-background);
+  backdrop-filter: var(--ogui-material-filter);
+  -webkit-backdrop-filter: var(--ogui-material-filter);
+  border: 1px solid var(--ogui-material-border);
 }
 
 /* ---------- buttons ---------- */
-
-.btn {
-  appearance: none;
-  border: 0;
-  font: 590 13.5px/1 var(--font);
-  letter-spacing: -0.012em;
-  border-radius: 13px;
-  padding: 0 15px;
-  height: 40px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text);
-  background: var(--glass-strong);
-  border: 1px solid var(--edge);
-  box-shadow: inset 0 1px 0 var(--edge-bright);
-  backdrop-filter: blur(34px) saturate(200%);
-  -webkit-backdrop-filter: blur(34px) saturate(200%);
-  transition:
-    transform 110ms ease-out,
-    background-color 140ms ease;
-}
-
-.btn:active:not(:disabled) {
-  transform: scale(0.975);
-}
-
-.btn:disabled {
-  opacity: 0.42;
-  cursor: default;
-}
-
-.btn-accent {
-  background: rgba(69, 16, 232, 0.78);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-
-.btn-accent:hover:not(:disabled) {
-  background: rgba(69, 16, 232, 0.92);
-}
 
 .btn-full {
   width: 100%;
   margin-top: 8px;
 }
 
-.btn[hidden] {
+.ogui-button[hidden] {
   display: none;
 }
 
@@ -647,7 +551,7 @@ body {
 }
 
 .is-default {
-  background: var(--glass-strong);
+  background: var(--ogui-material-background);
 }
 
 select.field {
@@ -656,7 +560,7 @@ select.field {
   font: 500 13px/1 var(--font);
   letter-spacing: -0.01em;
   color: var(--text);
-  background: var(--glass-strong);
+  background: var(--ogui-material-background);
   border: 1px solid var(--edge);
   border-radius: var(--r-sm);
   padding: 11px 13px;
@@ -704,9 +608,9 @@ select.field option {
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text);
-  background: var(--glass-strong);
-  backdrop-filter: blur(42px) saturate(200%);
-  -webkit-backdrop-filter: blur(42px) saturate(200%);
+  background: var(--ogui-material-background);
+  backdrop-filter: var(--ogui-material-filter);
+  -webkit-backdrop-filter: var(--ogui-material-filter);
   border: 1px solid var(--edge);
   box-shadow:
     inset 0 1px 0 var(--edge-bright),
@@ -758,8 +662,8 @@ select.field option {
     transition: opacity 160ms ease;
     transform: none;
   }
-  .tab:active,
-  .btn:active:not(:disabled),
+  .ogui-button:active:not(:disabled),
+  .ogui-segments__item:active,
   .row:active {
     transform: none;
   }
@@ -787,53 +691,17 @@ select.field option {
   flex-wrap: wrap;
 }
 
-.seg {
+#space-seg,
+#view .ogui-segments {
   display: flex;
   width: 100%;
-  gap: 3px;
-  padding: 3px;
-  border-radius: 12px;
-  background: var(--glass);
-  box-shadow: inset 0 1px 0 var(--edge-bright);
 }
 
-.seg-btn {
+#space-seg .ogui-segments__item,
+#view .ogui-segments .ogui-segments__item {
   flex: 1;
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--text-dim);
-  font: 500 12px/1 var(--font);
-  letter-spacing: -0.006em;
-  padding: 8px 6px;
-  border-radius: 9px;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition:
-    color 140ms ease,
-    background-color 140ms ease,
-    transform 110ms ease-out;
+  justify-content: center;
+  min-width: 0;
+  font-size: 12px;
 }
 
-.seg-btn:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-.seg-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.seg-btn[aria-selected="true"] {
-  color: var(--text);
-  background: var(--glass-strong);
-  box-shadow: inset 0 1px 0 var(--edge-bright);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .seg-btn:active:not(:disabled) {
-    transform: none;
-  }
-}

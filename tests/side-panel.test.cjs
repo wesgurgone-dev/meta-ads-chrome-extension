@@ -94,7 +94,7 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   await panel.goto(`chrome-extension://${extId}/panel/panel.html`);
   await panel.waitForTimeout(1400);
 
-  ok(await panel.locator('#tabs .tab').count() === 4, 'four tabs render');
+  ok(await panel.locator('#tabs .ogui-segments__item').count() === 4, 'four tabs render');
   ok(await panel.locator('.head').isVisible(), 'header renders');
   ok(await panel.locator('#btn-library').isVisible(), 'Go to Ad Library shows (panel tab is not the Library)');
 
@@ -123,6 +123,8 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(glass.length >= 4, `${glass.length} bubbles on screen`);
   ok(glass.every((g) => /blur\(/.test(g.blur)), 'all blur what is behind them');
   ok(glass.every((g) => /saturate\(/.test(g.blur)), 'all saturate it too');
+  ok(glass.every((g) => /brightness\(/.test(g.blur)),
+     'and all lift brightness, which is the library material and not the old hand-rolled one');
   ok(glass.every((g) => g.translucent), 'none of them is opaque');
   ok(glass.every((g) => g.sheen), 'all carry the specular sheen');
 
@@ -140,16 +142,77 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(!grain.onGlass, 'no bubble carries grain of its own');
   ok(/blur\(\d\dpx\)/.test(grain.meshBlur), `the ground is blurred (${grain.meshBlur})`);
 
-  console.log('--- the glass is thin ---');
-  const alphas = await panel.evaluate(() =>
-    [...document.querySelectorAll('.bubble')].map((n) => {
-      const m = getComputedStyle(n).backgroundColor.match(/rgba?\([^)]*,\s*([\d.]+)\)/);
-      return m ? Number(m[1]) : 1;
-    }));
-  ok(Math.max(...alphas) <= 0.45, `most translucent surface is <= 0.45 alpha (max ${Math.max(...alphas)})`);
+  console.log('--- surfaces are OpenGlass UI materials ---');
+  const materials = await panel.evaluate(() => {
+    const nodes = [...document.querySelectorAll('[data-ogui-glass]')];
+    return {
+      count: nodes.length,
+      tone: document.documentElement.dataset.oguiTone,
+      named: nodes.every((n) => ['clear', 'regular', 'frosted'].includes(n.dataset.oguiMaterial)),
+      used: [...new Set(nodes.map((n) => n.dataset.oguiMaterial))].sort(),
+      // The library's own values for the thin material.
+      clearSample: (() => {
+        const n = nodes.find((x) => x.dataset.oguiMaterial === 'clear');
+        const cs = getComputedStyle(n);
+        return { bg: cs.backgroundColor, filter: cs.backdropFilter };
+      })(),
+    };
+  });
+  ok(materials.count >= 4, `${materials.count} glass surfaces`);
+  ok(materials.named, `every one names a library material (${materials.used.join(', ')})`);
+  ok(materials.tone === 'dark' || materials.tone === 'light', `tone stamped (${materials.tone})`);
+  const expectClear = materials.tone === 'dark'
+    ? { bg: 'rgba(12, 18, 21, 0.3)', filter: 'blur(10px) saturate(1.18) brightness(1.04)' }
+    : { bg: 'rgba(255, 252, 244, 0.24)', filter: 'blur(10px) saturate(1.18) brightness(1.04)' };
+  ok(materials.clearSample.filter === expectClear.filter,
+     `clear material filter matches the library exactly (${materials.clearSample.filter})`);
+  ok(materials.clearSample.bg === expectClear.bg,
+     `clear material background matches the library exactly (${materials.clearSample.bg})`);
+
+  console.log('--- controls are library recipes, not bespoke ---');
+  const recipes = await panel.evaluate(() => ({
+    buttons: document.querySelectorAll('.ogui-button').length,
+    segments: document.querySelectorAll('.ogui-segments').length,
+    items: document.querySelectorAll('.ogui-segments__item').length,
+    bespoke: document.querySelectorAll('.btn, .tab, .seg-btn').length,
+    pressed: document.querySelectorAll('.ogui-segments__item[aria-pressed]').length,
+  }));
+  ok(recipes.buttons >= 2, `${recipes.buttons} buttons use .ogui-button`);
+  ok(recipes.segments >= 2, `${recipes.segments} segmented controls use .ogui-segments`);
+  ok(recipes.bespoke === 0, 'no hand-rolled control classes left');
+  ok(recipes.pressed === recipes.items, 'every segment carries aria-pressed');
+
+  console.log('--- vendored, attributed, and offline ---');
+  const vendored = await sw.evaluate(async () => {
+    const get = async (f) => {
+      const r = await fetch(chrome.runtime.getURL(f));
+      return r.ok ? r.text() : null;
+    };
+    const [styles, material, license, html] = await Promise.all([
+      get('vendor/open-glass-ui/styles.css'),
+      get('vendor/open-glass-ui/material.css'),
+      get('vendor/open-glass-ui/LICENSE'),
+      get('panel/panel.html'),
+    ]);
+    return {
+      styles: !!styles && styles.includes('.ogui-button'),
+      material: !!material && material.includes('data-ogui-glass'),
+      mit: !!license && license.includes('MIT License'),
+      attributed: !!material && material.includes('github.com/moekoelueker/open-glass-ui'),
+      remote: /https?:\/\/[^"')]*\.css/.test(html || ''),
+      reduced: !!material && material.includes('prefers-reduced-transparency'),
+      forced: !!material && material.includes('forced-colors'),
+    };
+  });
+  ok(vendored.styles, 'the recipe stylesheet ships with the extension');
+  ok(vendored.material, 'so does the generated material');
+  ok(vendored.mit && vendored.attributed, 'MIT licence and attribution ship with them');
+  ok(!vendored.remote, 'no stylesheet is loaded from the network');
+  ok(vendored.reduced && vendored.forced,
+     'reduced-transparency and forced-colors fallbacks are preserved');
 
   console.log('--- the tab bar casts nothing onto the view below it ---');
-  const tabShadow = await panel.evaluate(() => getComputedStyle(document.querySelector('.tabs')).boxShadow);
+  const tabShadow = await panel.evaluate(() => getComputedStyle(document.querySelector('#tabs')).boxShadow);
   // Every layer carries one colour, and an inset layer also carries the
   // keyword: equal counts means no layer casts outward.
   const layers = (tabShadow.match(/rgba?\(/g) || []).length;
@@ -158,10 +221,10 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
      `tabs have inset highlight only, no drop shadow (${layers} layers, ${insets} inset)`);
 
   console.log('--- personal / team switch in the header ---');
-  const segs = await panel.locator('#space-seg .seg-btn').allInnerTexts();
+  const segs = await panel.locator('#space-seg .ogui-segments__item').allInnerTexts();
   ok(segs.length === 2, `two segments (${JSON.stringify(segs)})`);
   ok(segs[0] === 'Personal' && segs[1] === 'Team', 'Personal and Team');
-  ok(await panel.locator('#space-seg .seg-btn[aria-selected="true"]').innerText() === 'Personal',
+  ok(await panel.locator('#space-seg .ogui-segments__item[aria-pressed="true"]').innerText() === 'Personal',
      'personal library selected by default');
 
   console.log('--- one mark everywhere, on the brand ramp ---');
@@ -193,29 +256,29 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
 
   console.log('--- views switch ---');
   for (const [view, needle] of [['saved', 'saved in this space'], ['lists', 'Lists in this space'], ['account', 'Space']]) {
-    await panel.locator(`#tabs .tab[data-view="${view}"]`).click();
+    await panel.locator(`#tabs .ogui-segments__item[data-view="${view}"]`).click();
     await panel.waitForTimeout(350);
     // innerText returns the CSS-transformed text, and section labels are
     // uppercase, so compare case-insensitively.
     const txt = (await panel.locator('#view').innerText()).toLowerCase();
     ok(txt.includes(needle.toLowerCase()), `${view} view renders (${needle})`);
   }
-  await panel.locator('#tabs .tab[data-view="home"]').click();
+  await panel.locator('#tabs .ogui-segments__item[data-view="home"]').click();
   await panel.waitForTimeout(300);
-  ok(await panel.locator('#tabs .tab[aria-selected="true"]').getAttribute('data-view') === 'home',
+  ok(await panel.locator('#tabs .ogui-segments__item[aria-pressed="true"]').getAttribute('data-view') === 'home',
      'selected tab tracks the view');
 
   console.log('--- theme switch reaches the panel ---');
-  await panel.locator('#tabs .tab[data-view="account"]').click();
+  await panel.locator('#tabs .ogui-segments__item[data-view="account"]').click();
   await panel.waitForTimeout(300);
-  await panel.locator('#view .tabs .tab', { hasText: 'Dark' }).click();
+  await panel.locator('#view .ogui-segments .ogui-segments__item', { hasText: 'Dark' }).click();
   await panel.waitForTimeout(500);
   ok(await panel.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'dark applied');
-  await panel.locator('#view .tabs .tab', { hasText: 'Light' }).click();
+  await panel.locator('#view .ogui-segments .ogui-segments__item', { hasText: 'Light' }).click();
   await panel.waitForTimeout(500);
   ok(await panel.evaluate(() => document.documentElement.dataset.theme) === 'light', 'light applied');
 
-  await panel.locator('#tabs .tab[data-view="home"]').click();
+  await panel.locator('#tabs .ogui-segments__item[data-view="home"]').click();
   await panel.waitForTimeout(400);
   await panel.screenshot({ path: (process.env.SHOT_DIR || require('os').tmpdir()) + '/side-panel.png' });
 

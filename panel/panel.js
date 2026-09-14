@@ -23,6 +23,13 @@
 
   const $ = (sel) => document.querySelector(sel);
 
+  /** Mark a node as an OpenGlass UI surface. */
+  const glass = (node, material = "clear") => {
+    node.setAttribute("data-ogui-glass", "");
+    node.setAttribute("data-ogui-material", material);
+    return node;
+  };
+
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -171,7 +178,7 @@
   // ---------------------------------------------------------------------
 
   const statTile = (value, label) => {
-    const t = el("div", "bubble stat");
+    const t = glass(el("div", "bubble stat"));
     t.append(
       el("div", "stat-value", String(value)),
       el("div", "stat-label", label),
@@ -184,7 +191,7 @@
   };
 
   const miniCard = (ad) => {
-    const card = el("div", "bubble mini");
+    const card = glass(el("div", "bubble mini"));
 
     const media = el("div", "mini-media");
     const thumb = thumbOf(ad);
@@ -242,7 +249,7 @@
       body.appendChild(chips);
     }
 
-    const dl = el("button", "btn mini-btn", "Download");
+    const dl = el("button", "ogui-button ogui-control--small mini-btn", "Download");
     dl.type = "button";
     dl.addEventListener("click", () => downloadAd(ad));
     body.appendChild(dl);
@@ -283,7 +290,7 @@
   };
 
   const renderHome = (body) => {
-    const card = el("div", "bubble card");
+    const card = glass(el("div", "bubble card"));
 
     if (!page.onLibrary) {
       card.append(
@@ -317,7 +324,7 @@
             : `${fresh.length} not saved yet. Keep scrolling for more.`,
       ),
     );
-    const saveAll = el("button", "btn btn-accent btn-full", "Save all on page");
+    const saveAll = el("button", "ogui-button ogui-button--primary ogui-control--medium btn-full", "Save all on page");
     saveAll.type = "button";
     saveAll.disabled = fresh.length === 0;
     saveAll.addEventListener("click", () => saveAds(fresh));
@@ -356,9 +363,8 @@
     if (lists.length === 0) body.appendChild(el("div", "empty", "No lists yet."));
     for (const list of lists) {
       const isDefault = list.id === targets.defaultListId;
-      const row = el(
-        "button",
-        "bubble row" + (isDefault ? " is-default" : ""),
+      const row = glass(
+        el("button", "bubble row" + (isDefault ? " is-default" : "")),
       );
       row.type = "button";
       const dot = el("span", "dot");
@@ -380,7 +386,7 @@
       body.appendChild(row);
     }
 
-    const add = el("button", "btn btn-full", "New list");
+    const add = el("button", "ogui-button ogui-control--medium btn-full", "New list");
     add.type = "button";
     add.addEventListener("click", async () => {
       const name = prompt("List name:");
@@ -408,7 +414,7 @@
     body.appendChild(sel);
 
     if (space && space.kind === "team") {
-      const code = el("div", "bubble card");
+      const code = glass(el("div", "bubble card"));
       code.append(
         el("div", "card-sub", "Team join code"),
         el("div", "code", space.code),
@@ -422,15 +428,17 @@
     }
 
     body.appendChild(el("div", "section", "Appearance"));
-    const themeRow = el("div", "bubble tabs");
+    const themeRow = el("div", "ogui-segments");
+    themeRow.setAttribute("role", "group");
+    themeRow.setAttribute("aria-label", "Appearance");
     for (const [value, label] of [
       ["system", "Auto"],
       ["light", "Light"],
       ["dark", "Dark"],
     ]) {
-      const b = el("button", "tab", label);
+      const b = el("button", "ogui-segments__item", label);
       b.type = "button";
-      b.setAttribute("aria-selected", String(targets.theme === value));
+      b.setAttribute("aria-pressed", String(targets.theme === value));
       b.addEventListener("click", async () => {
         await send({ type: "SET_THEME", theme: value });
         await refreshAll();
@@ -445,7 +453,7 @@
     );
 
     body.appendChild(el("div", "section", "Detection"));
-    const diag = el("div", "bubble card");
+    const diag = glass(el("div", "bubble card"));
     diag.append(
       el(
         "div",
@@ -482,7 +490,7 @@
     const nav = $("#tabs");
     nav.innerHTML = "";
     for (const key of ["home", "saved", "lists", "account"]) {
-      const b = el("button", "tab");
+      const b = el("button", "ogui-segments__item");
       b.type = "button";
       b.dataset.view = key;
       b.setAttribute("role", "tab");
@@ -508,6 +516,8 @@
       choice === "dark" ||
       (choice === "system" && !!(prefersDark && prefersDark.matches));
     document.documentElement.dataset.theme = dark ? "dark" : "light";
+    // OpenGlass UI selects its material by tone, so the two stay in step.
+    document.documentElement.dataset.oguiTone = dark ? "dark" : "light";
   };
 
   if (prefersDark && prefersDark.addEventListener)
@@ -535,11 +545,11 @@
     else entries.push({ id: null, label: "Team" });
 
     for (const entry of entries) {
-      const b = el("button", "seg-btn", entry.label);
+      const b = el("button", "ogui-segments__item", entry.label);
       b.type = "button";
-      b.setAttribute("role", "tab");
+      // The segmented recipe keys off aria-pressed, not aria-selected.
       b.setAttribute(
-        "aria-selected",
+        "aria-pressed",
         String(entry.id != null && entry.id === targets.activeSpaceId),
       );
       b.addEventListener("click", async () => {
@@ -567,8 +577,8 @@
       ? space.name + (space.kind === "team" ? " · team" : "")
       : "Meta Ad Library";
 
-    for (const b of document.querySelectorAll("#tabs .tab"))
-      b.setAttribute("aria-selected", String(b.dataset.view === view));
+    for (const b of document.querySelectorAll("#tabs .ogui-segments__item"))
+      b.setAttribute("aria-pressed", String(b.dataset.view === view));
 
     // The Ad Library button has no job once the tab is already there.
     $("#btn-library").hidden = page.onLibrary;
