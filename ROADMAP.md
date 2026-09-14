@@ -1,5 +1,60 @@
 # Roadmap: next four builds
 
+## Where this stands (last session)
+
+**1. Supabase team spaces — built.** Schema, row policies and grants are live on
+the project and verified against it, not just applied. Client, sign-in by emailed
+six-digit code, Settings pane with a three-fact status readout, merge rules,
+push, pull-since, and a realtime subscription that re-pulls on every wake.
+
+*Open:* the owner has not signed in yet, so the authenticated path is proven
+locally (14 SQL checks) but not against the live database. Do that first: it is
+five minutes and it unblocks end-to-end testing of everything below.
+
+**Shared groundwork — built.** `supabase/functions/claude` is an Anthropic proxy
+so no key ships in the extension, metered by `public.ai_usage` which a caller
+cannot clear. `src/supabase/ai.js` is the client side. Both items 3 and 4 depend
+on this and neither has to design it again.
+
+*Open:* deploy it. `supabase secrets set ANTHROPIC_API_KEY=...` then
+`supabase functions deploy claude`. `checkProxy()` in `src/supabase/ai.js` will
+tell you which of those two steps is missing.
+
+**2, 3 and 4 — researched, not built.** Two workflows were running when the
+session ended, each fanning out over the open technical questions and having
+every finding refuted by three independent skeptics before synthesis:
+
+- `ads-roadmap-2-3` — competitor discovery and AI ranking. The load-bearing
+  question is whether any Apify actor returns *similar* advertisers or only
+  keyword matches, because the whole feature shape depends on the answer.
+- `ads-roadmap-4-canvas` — the node canvas. One question is deliberately
+  adversarial: whether the canvas earns its place over a plain list of
+  references with a text field beside each.
+
+Their results were not read before the session ended. Re-run them rather than
+guessing; the scripts are saved under the session's `workflows/scripts/`.
+
+## Sequencing
+
+Unchanged: **1 → 3 → 2 → 4**, and item 1 is done. Item 3 (ranking) before item 2
+(discovery) because ranking works on ads already saved, while discovery depends
+on scraper behaviour nobody here controls.
+
+Item 4 was promoted into the active roadmap by the owner.
+
+## Standing decisions
+
+- Local-only mode stays first class; sign-in is additive. The strongest claim
+  this extension makes is that nothing leaves your machine, and a team feature
+  that quietly revokes it is a different product.
+- No credential ever reaches the repo or the bundle. The publishable key does,
+  because that is what it is for; a test asserts no `service_role` key and no
+  connection string are in the built bundles.
+- SDF refraction is wired but off: in Chromium it replaces the backdrop rather
+  than bending it. One prop away if that changes.
+
+---
+
 Written as a handoff. Current state is a serverless MV3 extension: capture,
 spaces, colour-coded lists, side panel, HD downloads, themes. No build step, no
 backend, no accounts. The four items below each break one of those properties,
