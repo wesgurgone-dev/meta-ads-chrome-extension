@@ -219,12 +219,30 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   await panel.waitForTimeout(400);
   await panel.screenshot({ path: (process.env.SHOT_DIR || require('os').tmpdir()) + '/side-panel.png' });
 
-  console.log('--- dashboard detail view keeps tall creatives on screen ---');
   const dash = await ctx.newPage();
   watch(dash);
   await dash.setViewportSize({ width: 1280, height: 900 });
   await dash.goto(`chrome-extension://${extId}/dashboard/dashboard.html`);
   await dash.waitForTimeout(1200);
+
+  console.log('--- panel and dashboard share one ground ---');
+  // They drifted once: the panel's scrim was softened and the dashboard's was
+  // not, which left the panel far more vivid than the same artwork beside it.
+  const panelGround = await panel.evaluate(() => {
+    const m = getComputedStyle(document.querySelector('.mesh'));
+    return { filter: m.filter, scrim: getComputedStyle(document.querySelector('.mesh-scrim')).background };
+  });
+  const dashGround = await dash.evaluate(() => ({
+    filter: getComputedStyle(document.body, '::before').filter,
+    scrim: getComputedStyle(document.body, '::after').background,
+  }));
+  ok(panelGround.filter === dashGround.filter,
+     `same blur and saturation (${panelGround.filter} / ${dashGround.filter})`);
+  const scrimAlphas = (s) => (s.match(/rgba\([^)]*?,\s*([\d.]+)\)/g) || []).join(',');
+  ok(scrimAlphas(panelGround.scrim) === scrimAlphas(dashGround.scrim),
+     'same scrim strength');
+
+  console.log('--- dashboard detail view keeps tall creatives on screen ---');
   const fit = await dash.evaluate(async () => {
     // A real 9:16 creative, the common shape, at the size the modal gives it.
     const svg =

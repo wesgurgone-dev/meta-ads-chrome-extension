@@ -39,18 +39,12 @@
   --r-md: 18px;
   --r-sm: 13px;
 
-  --scrim: radial-gradient(
-      120% 62% at 50% 46%,
-      rgba(7, 7, 7, 0.08) 0%,
-      rgba(7, 7, 7, 0.42) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(7, 7, 7, 0.62) 0%,
-      rgba(7, 7, 7, 0.06) 30%,
-      rgba(7, 7, 7, 0.04) 64%,
-      rgba(7, 7, 7, 0.55) 100%
-    );
+  --scrim: linear-gradient(
+    180deg,
+    rgba(7, 7, 7, 0.84) 0%,
+    rgba(7, 7, 7, 0.66) 45%,
+    rgba(7, 7, 7, 0.82) 100%
+  );
 }
 
 /* Light keeps the same ramp and lets the pale end of it carry the panel. */
@@ -64,18 +58,12 @@
   --glass-strong: rgba(255, 255, 255, 0.4);
   --edge: rgba(255, 255, 255, 0.72);
   --edge-bright: rgba(255, 255, 255, 0.95);
-  --scrim: radial-gradient(
-      120% 62% at 50% 46%,
-      rgba(255, 255, 255, 0.1) 0%,
-      rgba(255, 255, 255, 0.46) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.66) 0%,
-      rgba(255, 255, 255, 0.14) 32%,
-      rgba(255, 255, 255, 0.12) 64%,
-      rgba(255, 255, 255, 0.6) 100%
-    );
+  --scrim: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.66) 45%,
+    rgba(255, 255, 255, 0.76) 100%
+  );
 }
 
 * {
@@ -116,33 +104,33 @@ body {
   background-color: var(--ink);
   background-image:
     radial-gradient(
-      54% 30% at 72% 10%,
-      rgba(69, 16, 232, 1) 0%,
+      26% 22% at 76% 14%,
+      rgba(69, 16, 232, 0.95) 0%,
       rgba(69, 16, 232, 0) 100%
     ),
     radial-gradient(
-      58% 32% at 14% 30%,
-      rgba(69, 16, 232, 0.92) 0%,
+      30% 26% at 16% 44%,
+      rgba(69, 16, 232, 0.7) 0%,
       rgba(69, 16, 232, 0) 100%
     ),
     radial-gradient(
-      56% 28% at 84% 50%,
-      rgba(237, 12, 221, 1) 0%,
+      28% 22% at 84% 60%,
+      rgba(237, 12, 221, 0.8) 0%,
       rgba(237, 12, 221, 0) 100%
     ),
     radial-gradient(
-      50% 26% at 12% 62%,
-      rgba(237, 12, 221, 0.85) 0%,
+      24% 18% at 28% 76%,
+      rgba(237, 12, 221, 0.5) 0%,
       rgba(237, 12, 221, 0) 100%
     ),
     radial-gradient(
-      54% 26% at 74% 78%,
-      rgba(255, 196, 29, 0.95) 0%,
+      26% 18% at 68% 88%,
+      rgba(255, 196, 29, 0.72) 0%,
       rgba(255, 196, 29, 0) 100%
     ),
     radial-gradient(
-      46% 22% at 26% 92%,
-      rgba(255, 255, 255, 0.95) 0%,
+      22% 14% at 40% 98%,
+      rgba(255, 255, 255, 0.85) 0%,
       rgba(255, 255, 255, 0) 100%
     ),
     /* The ramp itself, in order, under the mesh that breaks it up. */
@@ -154,7 +142,7 @@ body {
         #ffc41d 86%,
         #ffffff 100%
       );
-  filter: blur(72px) saturate(148%);
+  filter: blur(60px) saturate(125%);
 }
 
 .mesh-scrim {

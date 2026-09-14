@@ -38,7 +38,9 @@ The ground is one gradient ramp, used everywhere:
 It is not painted as a ramp. Each stop is pulled out into its own oversized
 radial blob, the whole thing is blurred hard, and a scrim sits on top: enough
 to keep type legible, not so much that four distinct colours collapse into one
-purple. Grain over the scrim and again, fainter, on the glass hides the banding
+purple. The panel and the dashboard share that ground exactly, same blobs, same
+blur, same scrim; they drifted apart once when one was retuned and the other
+was not, so a test now compares the two computed grounds directly. Grain over the scrim and again, fainter, on the glass hides the banding
 a gradient this large would otherwise show, and gives the blur something to
 work on so the two surfaces meet without a hard synthetic line.
 
