@@ -66,14 +66,25 @@ back. Tombstones also give undo for free.
 
 ## Known issue: the six-digit code does not arrive
 
-Reported after the first real sign-in attempt. Not yet fixed, and not yet
-confirmed, so treat the diagnosis below as the first thing to check rather than
-the answer.
+**Confirmed.** The email is delivered; it just contains a link instead of a
+code. Clicking that link ends on `localhost refused to connect`, which is the
+tell: the template rendered `{{ .ConfirmationURL }}`, Supabase verified the
+token, and then redirected to the project's Site URL, which is still the default
+`http://localhost:3000` and has nothing serving it. Delivery and SMTP were never
+the problem.
 
-**Most likely cause: the email template never renders the code.** Supabase's
-default *Magic Link* template contains only `{{ .ConfirmationURL }}`. The code
-is generated either way, but the email that goes out is a link and shows no
-digits at all, which looks identical to non-delivery.
+**Cause: the email template never renders the code.** Supabase's default *Magic
+Link* template contains only `{{ .ConfirmationURL }}`. The code is generated
+either way, but the email that goes out is a link and shows no digits at all,
+which looks identical to non-delivery.
+
+Two consequences worth knowing before retrying:
+
+- **Clicking the link spends the code.** It is one token, and the link consumes
+  it. After fixing the template, request a fresh code and type the digits.
+- **The extension cannot use the link at all.** It is not a page at localhost,
+  and the client is created with `detectSessionInUrl: false`. Making the
+  redirect land somewhere real would not help; the code is the path.
 
 Fix in **Authentication → Email Templates → Magic Link**, adding the token:
 
@@ -84,17 +95,16 @@ Fix in **Authentication → Email Templates → Magic Link**, adding the token:
 <p>Or follow this link instead: <a href="{{ .ConfirmationURL }}">sign in</a></p>
 ```
 
-**Second candidate: the built-in SMTP.** It is rate limited to a handful of
-messages an hour and is documented as being for testing, not delivery. On newer
-projects it will only send to addresses attached to the Supabase organisation
-and drops everything else silently. **Authentication → Emails** shows whether
-custom SMTP is configured; if the template fix does not do it, this is next.
+While you are in there, set **Authentication → URL Configuration → Site URL** to
+something real. It does not affect the code path, but leaving it at
+`http://localhost:3000` means every link Supabase ever emails dead-ends.
 
-**Check the logs before changing anything else.** Project → Logs → Auth shows
-whether the send was attempted and what came back, which settles delivery
-versus template in one look.
+**Ruled out: the built-in SMTP.** It is rate limited and testing-only, and on
+newer projects it silently drops addresses outside the Supabase organisation.
+That was the second candidate until the email turned up; it is not the problem
+here.
 
-### If it stays broken
+### If it stays broken after the template fix
 
 The client already has everything needed to switch: `sendCode` and `verifyCode`
 in `src/supabase/client.js` are the only two call sites, and both are one line.

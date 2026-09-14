@@ -856,7 +856,14 @@ const TeamSync = () => {
                 onClick={async () => {
                   setNote("Sending...");
                   const res = await sendCode(email);
-                  setNote(res.ok ? "Check your email for the code." : res.error);
+                  // Clicking the link in that email spends the same one-time
+                  // code and lands on a page nothing is serving. Typing the
+                  // digits is the path that works.
+                  setNote(
+                    res.ok
+                      ? "Check your email. Type the six digits here; do not click the link, it spends the same code."
+                      : res.error,
+                  );
                   if (res.ok) setStage("sent");
                 }}
               >
