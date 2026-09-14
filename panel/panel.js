@@ -513,8 +513,54 @@
   if (prefersDark && prefersDark.addEventListener)
     prefersDark.addEventListener("change", applyTheme);
 
+  /**
+   * Personal library on the left, team on the right. Named generically when
+   * there is one of each (the common case) and by space name when there are
+   * more, so the control stays a switch rather than turning into a list.
+   */
+  const renderSpaceSeg = () => {
+    const seg = $("#space-seg");
+    seg.innerHTML = "";
+
+    const own = targets.spaces.filter((s) => s.kind !== "team");
+    const teams = targets.spaces.filter((s) => s.kind === "team");
+    const entries = own.map((s) => ({
+      id: s.id,
+      label: own.length === 1 ? "Personal" : s.name,
+    }));
+
+    if (teams.length)
+      for (const s of teams)
+        entries.push({ id: s.id, label: teams.length === 1 ? "Team" : s.name });
+    else entries.push({ id: null, label: "Team" });
+
+    for (const entry of entries) {
+      const b = el("button", "seg-btn", entry.label);
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute(
+        "aria-selected",
+        String(entry.id != null && entry.id === targets.activeSpaceId),
+      );
+      b.addEventListener("click", async () => {
+        if (entry.id == null) {
+          // Nothing to switch to yet. Say where team spaces come from rather
+          // than sitting there disabled.
+          toast("Create or join a team space in the dashboard");
+          send({ type: "OPEN_DASHBOARD" });
+          return;
+        }
+        if (entry.id === targets.activeSpaceId) return;
+        await send({ type: "SPACE_OP", op: "activate", spaceId: entry.id });
+        await refreshAll();
+      });
+      seg.appendChild(b);
+    }
+  };
+
   const render = () => {
     applyTheme();
+    renderSpaceSeg();
 
     const space = activeSpace();
     $("#head-sub").textContent = space

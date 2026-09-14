@@ -126,6 +126,61 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(glass.every((g) => g.translucent), 'none of them is opaque');
   ok(glass.every((g) => g.sheen), 'all carry the specular sheen');
 
+  console.log('--- grain belongs to the ground, not to the glass ---');
+  const grain = await panel.evaluate(() => {
+    const noise = (cs) => /svg\+xml/.test(cs.backgroundImage || '');
+    const bubbles = [...document.querySelectorAll('.bubble')];
+    return {
+      ground: noise(getComputedStyle(document.querySelector('.mesh-scrim'), '::after')),
+      onGlass: bubbles.some((n) => noise(getComputedStyle(n)) || noise(getComputedStyle(n, '::before'))),
+      meshBlur: getComputedStyle(document.querySelector('.mesh')).filter,
+    };
+  });
+  ok(grain.ground, 'the ground is grained');
+  ok(!grain.onGlass, 'no bubble carries grain of its own');
+  ok(/blur\(\d\dpx\)/.test(grain.meshBlur), `the ground is blurred (${grain.meshBlur})`);
+
+  console.log('--- the glass is thin ---');
+  const alphas = await panel.evaluate(() =>
+    [...document.querySelectorAll('.bubble')].map((n) => {
+      const m = getComputedStyle(n).backgroundColor.match(/rgba?\([^)]*,\s*([\d.]+)\)/);
+      return m ? Number(m[1]) : 1;
+    }));
+  ok(Math.max(...alphas) <= 0.45, `most translucent surface is <= 0.45 alpha (max ${Math.max(...alphas)})`);
+
+  console.log('--- the tab bar casts nothing onto the view below it ---');
+  const tabShadow = await panel.evaluate(() => getComputedStyle(document.querySelector('.tabs')).boxShadow);
+  // Every layer carries one colour, and an inset layer also carries the
+  // keyword: equal counts means no layer casts outward.
+  const layers = (tabShadow.match(/rgba?\(/g) || []).length;
+  const insets = (tabShadow.match(/inset/g) || []).length;
+  ok(layers > 0 && layers === insets,
+     `tabs have inset highlight only, no drop shadow (${layers} layers, ${insets} inset)`);
+
+  console.log('--- personal / team switch in the header ---');
+  const segs = await panel.locator('#space-seg .seg-btn').allInnerTexts();
+  ok(segs.length === 2, `two segments (${JSON.stringify(segs)})`);
+  ok(segs[0] === 'Personal' && segs[1] === 'Team', 'Personal and Team');
+  ok(await panel.locator('#space-seg .seg-btn[aria-selected="true"]').innerText() === 'Personal',
+     'personal library selected by default');
+
+  console.log('--- one mark everywhere, on the brand ramp ---');
+  const marks = await sw.evaluate(async () => {
+    const read = async (f) => (await (await fetch(chrome.runtime.getURL(f))).text());
+    const panelHtml = await read('panel/panel.html');
+    const dashHtml = await read('dashboard/dashboard.html');
+    const hasRamp = (s) => ['#4510e8', '#ed0cdd', '#ffc41d'].every((c) => s.includes(c));
+    return {
+      panel: hasRamp(panelHtml),
+      dash: hasRamp(dashHtml),
+      oldBlue: panelHtml.includes('#2a78d6') || dashHtml.includes('#2a78d6'),
+      dashMarks: (dashHtml.match(/class="mark"/g) || []).length,
+    };
+  });
+  ok(marks.panel, 'panel mark uses the ramp');
+  ok(marks.dash && marks.dashMarks === 2, `both dashboard marks use it (${marks.dashMarks})`);
+  ok(!marks.oldBlue, 'the old blue mark is gone everywhere');
+
   console.log('--- SF Pro first in the stack, not bundled ---');
   const font = await panel.evaluate(() => getComputedStyle(document.body).fontFamily);
   ok(/^"?SF Pro Display"?/.test(font), `SF Pro Display leads (${font.slice(0, 40)}...)`);

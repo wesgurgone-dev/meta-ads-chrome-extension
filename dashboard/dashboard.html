@@ -11,32 +11,17 @@
       <div class="brand">
         <span class="brand-mark"
           ><svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
-            <rect
-              x="1"
-              y="7"
-              width="8.5"
-              height="10"
-              rx="2"
-              fill="currentColor"
-              opacity=".26"
-            />
-            <rect
-              x="6"
-              y="5"
-              width="9.5"
-              height="14"
-              rx="2.2"
-              fill="currentColor"
-              opacity=".5"
-            />
-            <rect
-              x="12"
-              y="3"
-              width="11"
-              height="18"
-              rx="2.6"
-              fill="currentColor"
-            /></svg
+            <defs>
+            <linearGradient id="markSidebar" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#4510e8" />
+              <stop offset="0.55" stop-color="#ed0cdd" />
+              <stop offset="1" stop-color="#ffc41d" />
+            </linearGradient>
+          </defs>
+          <rect x="1" y="7" width="8.5" height="10" rx="2.4" fill="#9b8cf2" opacity=".5" />
+          <rect x="6" y="5" width="9.5" height="14" rx="2.8" fill="#9b8cf2" opacity=".8" />
+          <rect x="12" y="3" width="11" height="18" rx="3.2" fill="url(#markSidebar)" />
+          </svg
         ></span>
         <div class="brand-text">
           <div class="brand-name">Ads Saver</div>
@@ -148,38 +133,15 @@
         <div class="empty-mark">
           <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
             <defs>
-              <linearGradient id="malMarkB" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#4510e8" />
-                <stop offset="0.6" stop-color="#ed0cdd" />
-                <stop offset="1" stop-color="#ffc41d" />
-              </linearGradient>
-            </defs>
-            <rect
-              x="1"
-              y="7"
-              width="8.5"
-              height="10"
-              rx="2"
-              fill="url(#malMarkB)"
-              opacity=".26"
-            />
-            <rect
-              x="6"
-              y="5"
-              width="9.5"
-              height="14"
-              rx="2.2"
-              fill="url(#malMarkB)"
-              opacity=".5"
-            />
-            <rect
-              x="12"
-              y="3"
-              width="11"
-              height="18"
-              rx="2.6"
-              fill="url(#malMarkB)"
-            />
+            <linearGradient id="markEmpty" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#4510e8" />
+              <stop offset="0.55" stop-color="#ed0cdd" />
+              <stop offset="1" stop-color="#ffc41d" />
+            </linearGradient>
+          </defs>
+          <rect x="1" y="7" width="8.5" height="10" rx="2.4" fill="#9b8cf2" opacity=".5" />
+          <rect x="6" y="5" width="9.5" height="14" rx="2.8" fill="#9b8cf2" opacity=".8" />
+          <rect x="12" y="3" width="11" height="18" rx="3.2" fill="url(#markEmpty)" />
           </svg>
         </div>
         <h2>No ads here yet</h2>

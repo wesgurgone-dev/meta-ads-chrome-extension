@@ -27,8 +27,8 @@
 
   --plane: transparent;
   --dot: transparent;
-  --panel: rgba(255, 255, 255, 0.56);
-  --panel-2: rgba(255, 255, 255, 0.38);
+  --panel: rgba(255, 255, 255, 0.24);
+  --panel-2: rgba(255, 255, 255, 0.14);
   --border: rgba(255, 255, 255, 0.62);
   --border-strong: rgba(255, 255, 255, 0.85);
   --text: rgba(10, 6, 20, 0.94);
@@ -43,7 +43,7 @@
     "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
     "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 8px 24px rgba(30, 10, 60, 0.1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 10px rgba(30, 10, 60, 0.06);
   --nav-active-ink: #2d0b8f;
   --chip-hot-bg: rgba(255, 196, 29, 0.22);
   --chip-hot-border: rgba(255, 196, 29, 0.5);
@@ -68,8 +68,8 @@
   );
   --plane: transparent;
   --dot: transparent;
-  --panel: rgba(255, 255, 255, 0.075);
-  --panel-2: rgba(255, 255, 255, 0.05);
+  --panel: rgba(255, 255, 255, 0.05);
+  --panel-2: rgba(255, 255, 255, 0.03);
   --border: rgba(255, 255, 255, 0.15);
   --border-strong: rgba(255, 255, 255, 0.3);
   --text: rgba(255, 255, 255, 0.96);
@@ -80,7 +80,7 @@
   --green: #34c759;
   --red: #ff5f6d;
   --shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 28px rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 10px rgba(0, 0, 0, 0.16);
   --nav-active-ink: #d6c6ff;
   --chip-hot-bg: rgba(255, 196, 29, 0.18);
   --chip-hot-border: rgba(255, 196, 29, 0.38);
@@ -98,8 +98,8 @@
   );
   --plane: transparent;
   --dot: transparent;
-  --panel: rgba(255, 255, 255, 0.075);
-  --panel-2: rgba(255, 255, 255, 0.05);
+  --panel: rgba(255, 255, 255, 0.05);
+  --panel-2: rgba(255, 255, 255, 0.03);
   --border: rgba(255, 255, 255, 0.15);
   --border-strong: rgba(255, 255, 255, 0.3);
   --text: rgba(255, 255, 255, 0.96);
@@ -110,7 +110,7 @@
   --green: #34c759;
   --red: #ff5f6d;
   --shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 28px rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 10px rgba(0, 0, 0, 0.16);
   --nav-active-ink: #d6c6ff;
   --chip-hot-bg: rgba(255, 196, 29, 0.18);
   --chip-hot-border: rgba(255, 196, 29, 0.38);
@@ -1156,8 +1156,8 @@ select:focus {
 .card,
 .modal-card,
 .btn {
-  backdrop-filter: blur(30px) saturate(180%);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(42px) saturate(200%);
+  -webkit-backdrop-filter: blur(42px) saturate(200%);
 }
 
 /* Response on press, not on release. */

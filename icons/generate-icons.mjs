@@ -71,15 +71,20 @@ const png = (size, pixelFn) => {
 
 // --- The mark -------------------------------------------------------------
 
-// A diagonal blue-to-violet gradient across the whole stack, so the cards
-// read as one object lit from the top left rather than three flat shapes.
-const GRAD_FROM = [42, 120, 214]; // #2a78d6
-const GRAD_TO = [139, 92, 246]; // #8b5cf6
+// The brand ramp, on the front card only. The two behind it are flat lilac, so
+// the gradient reads as the face of the stack rather than as three shapes that
+// happen to share a wash.
+const RAMP = [
+  [69, 16, 232], // #4510e8
+  [237, 12, 221], // #ed0cdd
+  [255, 196, 29], // #ffc41d
+];
+const LILAC = [155, 140, 242]; // #9b8cf2
 
 // Back to front. Coordinates are fractions of the canvas.
 const CARDS = [
-  { x0: 0.08, y0: 0.3, x1: 0.44, y1: 0.7, r: 0.05, alpha: 0.26 },
-  { x0: 0.26, y0: 0.22, x1: 0.66, y1: 0.78, r: 0.055, alpha: 0.5 },
+  { x0: 0.08, y0: 0.3, x1: 0.44, y1: 0.7, r: 0.05, alpha: 0.5, flat: LILAC },
+  { x0: 0.26, y0: 0.22, x1: 0.66, y1: 0.78, r: 0.055, alpha: 0.8, flat: LILAC },
   { x0: 0.46, y0: 0.12, x1: 0.92, y1: 0.88, r: 0.07, alpha: 1 },
 ];
 
@@ -96,14 +101,13 @@ const roundedRectSDF = (px, py, card) => {
   return Math.hypot(ox, oy) + Math.min(Math.max(dx, dy), 0) - card.r;
 };
 
-/** Gradient colour at a point, sampled across the top-left/bottom-right axis. */
+/** Ramp colour at a point, sampled across the top-left/bottom-right axis. */
 const gradientAt = (u, v) => {
   const t = Math.min(Math.max((u + v) / 2, 0), 1);
-  return [
-    GRAD_FROM[0] + (GRAD_TO[0] - GRAD_FROM[0]) * t,
-    GRAD_FROM[1] + (GRAD_TO[1] - GRAD_FROM[1]) * t,
-    GRAD_FROM[2] + (GRAD_TO[2] - GRAD_FROM[2]) * t,
-  ];
+  const span = 1 / (RAMP.length - 1);
+  const i = Math.min(Math.floor(t / span), RAMP.length - 2);
+  const k = (t - i * span) / span;
+  return [0, 1, 2].map((c) => RAMP[i][c] + (RAMP[i + 1][c] - RAMP[i][c]) * k);
 };
 
 const draw = (x, y, size) => {
@@ -117,20 +121,21 @@ const draw = (x, y, size) => {
   let B = 0;
   let A = 0;
 
-  // The gradient spans the whole mark, not each card, so the stack reads as
-  // one object rather than three independently shaded ones.
+  // The ramp spans the whole mark, so the front card reads as one lit face
+  // rather than a gradient restarting inside its own bounds.
   const [gr, gg, gb] = gradientAt(u, v);
 
   for (const card of CARDS) {
     const d = roundedRectSDF(u, v, card);
     const coverage = Math.min(Math.max(0.5 - d / edge, 0), 1);
     if (coverage <= 0) continue;
+    const [cr, cg, cb] = card.flat || [gr, gg, gb];
     const sa = coverage * card.alpha;
     const outA = sa + A * (1 - sa);
     if (outA <= 0) continue;
-    R = (gr * sa + R * A * (1 - sa)) / outA;
-    G = (gg * sa + G * A * (1 - sa)) / outA;
-    B = (gb * sa + B * A * (1 - sa)) / outA;
+    R = (cr * sa + R * A * (1 - sa)) / outA;
+    G = (cg * sa + G * A * (1 - sa)) / outA;
+    B = (cb * sa + B * A * (1 - sa)) / outA;
     A = outA;
   }
 
