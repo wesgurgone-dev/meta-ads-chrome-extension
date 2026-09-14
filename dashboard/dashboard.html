@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meta Ads Library Saver</title>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <aside id="sidebar">
+      <div class="brand">
+        <span class="brand-logo">▲</span>
+        <div>
+          <div class="brand-name">Ads Saver</div>
+          <div class="brand-sub">Meta Ad Library</div>
+        </div>
+      </div>
+
+      <nav id="nav-lists">
+        <button class="nav-item active" data-list="__all__">
+          <span>All ads</span>
+          <span class="nav-count" id="count-all">0</span>
+        </button>
+        <div id="user-lists"></div>
+      </nav>
+
+      <button id="btn-new-list" class="btn btn-ghost">+ New list</button>
+
+      <div class="sidebar-footer">
+        <button id="btn-export-json" class="btn btn-ghost small">
+          Export JSON
+        </button>
+        <button id="btn-export-csv" class="btn btn-ghost small">
+          Export CSV
+        </button>
+      </div>
+    </aside>
+
+    <main id="main">
+      <header id="topbar">
+        <input
+          id="search"
+          type="search"
+          placeholder="Search advertiser, copy, CTA, link..."
+        />
+        <select id="filter-format">
+          <option value="">All formats</option>
+          <option value="video">Video</option>
+          <option value="image">Image</option>
+          <option value="carousel">Carousel</option>
+        </select>
+        <select id="filter-status">
+          <option value="">Any status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select id="sort">
+          <option value="saved">Recently saved</option>
+          <option value="running">Longest running</option>
+          <option value="started">Newest ads</option>
+          <option value="advertiser">Advertiser A-Z</option>
+          <option value="reach">Highest EU reach</option>
+        </select>
+      </header>
+
+      <section id="stats" class="stats"></section>
+
+      <section id="bulkbar" class="bulkbar hidden">
+        <span id="bulk-count">0 selected</span>
+        <select id="bulk-list-target"></select>
+        <button id="bulk-add" class="btn btn-primary small">Add to list</button>
+        <button id="bulk-download" class="btn btn-green small">
+          Download media
+        </button>
+        <button id="bulk-remove" class="btn btn-danger small">Remove</button>
+        <button id="bulk-clear" class="btn btn-ghost small">Clear</button>
+      </section>
+
+      <section id="grid" class="grid"></section>
+      <div id="empty" class="empty hidden">
+        <div class="empty-icon">▲</div>
+        <h2>No ads here yet</h2>
+        <p>
+          Browse the
+          <a
+            href="https://www.facebook.com/ads/library/"
+            target="_blank"
+            rel="noreferrer"
+            >Meta Ad Library</a
+          >, scroll the results, and hit <strong>Save</strong> on any ad (or
+          "Save all captured" in the floating panel).
+        </p>
+      </div>
+    </main>
+
+    <div id="modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-card" id="modal-card"></div>
+    </div>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>
