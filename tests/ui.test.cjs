@@ -64,7 +64,11 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   const watch = (p, tag) => {
     p.on('pageerror', (e) => errors.push(`${tag} pageerror: ${e.message}`));
     p.on('console', (m) => {
-      if (m.type() === 'error' && !m.text().includes('ERR_')) errors.push(`${tag} console: ${m.text()}`);
+      const text = m.text();
+      // The team-sync test deliberately routes a 404 to prove the readout
+      // names a missing schema, so that one is the case under test.
+      const expected = text.includes('ERR_') || /404 \(Not Found\)/.test(text);
+      if (m.type() === 'error' && !expected) errors.push(`${tag} console: ${text}`);
     });
   };
 
@@ -87,8 +91,10 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
              panelBad: bad(panel), dashBad: bad(dash) };
   });
   ok(!bundles.panelBad && !bundles.dashBad, 'no eval, no new Function, no inline source map');
-  ok(bundles.panelKB < 400 && bundles.dashKB < 400,
-     `bundles stay reasonable (panel ${bundles.panelKB}KB, dashboard ${bundles.dashKB}KB)`);
+  // The dashboard carries supabase-js (~220KB) and the panel does not, so they
+  // get their own budgets rather than one number that hides the difference.
+  ok(bundles.panelKB < 320, `panel bundle ${bundles.panelKB}KB`);
+  ok(bundles.dashKB < 560, `dashboard bundle ${bundles.dashKB}KB, supabase-js included`);
 
   console.log('--- content script still decorates Ad Library cards ---');
   const lib = await ctx.newPage();
@@ -239,6 +245,52 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(fit.natural === '1080x1920', `probe is 9:16 (${fit.natural})`);
   ok(fit.fit === 'contain', 'creatives letterbox rather than stretch');
   ok(fit.h > 0 && fit.h <= fit.vh * 0.6, `a 9:16 creative fits (${fit.h}px of ${fit.vh}px)`);
+
+  console.log('--- team sync status reports each fact separately ---');
+  // The browser in CI has no outbound network, so the project is routed here.
+  // The three facts fail independently and each has a different fix, which is
+  // why they are three rows and not one "connected" light.
+  const sb = /jkshbnmqyyrafszagxiq\.supabase\.co/;
+  await dash.route(new RegExp(sb.source + '.*/auth/v1/health'), (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+  await dash.route(new RegExp(sb.source + '.*/rest/v1/teams'), (r) =>
+    r.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'PGRST205', message: "Could not find the table 'public.teams'" }),
+    }));
+
+  await dash.locator('.sidebar-footer .ogui-button:has-text("Settings")').click();
+  await dash.waitForTimeout(2500);
+  const rows = (await dash.locator('.sync-row').allInnerTexts()).map((s) => s.replace(/\s+/g, ' ').trim());
+  ok(rows.length === 4, `four status rows (${rows.length})`);
+  ok(/Project configured yes/.test(rows[0] || ''), `configured: ${rows[0]}`);
+  ok(/Project reachable yes/.test(rows[1] || ''), `reachable: ${rows[1]}`);
+  ok(/Schema applied run supabase\/schema\.sql/.test(rows[2] || ''),
+     `schema missing is named, with the fix: ${rows[2]}`);
+  ok(/Signed in sign in below/.test(rows[3] || ''), `signed out: ${rows[3]}`);
+
+  console.log('--- the extension ships no privileged credential ---');
+  const secrets = await sw.evaluate(async () => {
+    const get = async (f) => (await (await fetch(chrome.runtime.getURL(f))).text());
+    const files = ['dashboard/dashboard.bundle.js', 'panel/panel.bundle.js', 'background.js'];
+    const texts = await Promise.all(files.map(get));
+    const joined = texts.join('\n');
+    return {
+      // A key, not the word: "service_role" appears in this repo's own prose
+      // about why it must never be bundled.
+      serviceRole: /sb_secret_[A-Za-z0-9_-]{8,}/.test(joined)
+        || /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}/.test(joined),
+      dbPassword: /postgresql:\/\/[^\s"']*:[^\s"'@]+@/.test(joined),
+      publishable: /sb_publishable_/.test(joined),
+    };
+  });
+  ok(!secrets.serviceRole, 'no service_role key is bundled');
+  ok(!secrets.dbPassword, 'no database connection string is bundled');
+  ok(secrets.publishable, 'the publishable key is, which is what it is for');
+
+  await dash.locator('.modal-close').click();
+  await dash.waitForTimeout(300);
 
   console.log('--- console clean ---');
   ok(errors.length === 0, errors.length ? errors.slice(0, 4).join(' | ') : 'no page errors');

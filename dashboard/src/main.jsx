@@ -12,6 +12,14 @@ import { Button, GlassSystemProvider, SegmentedControl } from "open-glass-ui";
 import "open-glass-ui/styles.css";
 import { Surface } from "../../src/surface.jsx";
 import {
+  checkConnection,
+  getSession,
+  sendCode,
+  signOut,
+  verifyCode,
+} from "../../src/supabase/client.js";
+import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../../src/supabase/config.js";
+import {
   LIST_COLORS,
   M,
   adFormat,
@@ -472,6 +480,179 @@ const TeamModal = ({ space, onClose, onDone, onImport, setActiveList }) => {
   );
 };
 
+/**
+ * Team sync setup.
+ *
+ * The status is three separate facts rather than one "connected" light,
+ * because they fail independently and each has a different fix: the project
+ * can be unreachable, reachable but without the schema, or ready but not
+ * signed in.
+ */
+const TeamSync = () => {
+  const [config, setConfig] = useState({ url: "", anonKey: "" });
+  const [status, setStatus] = useState(null);
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [stage, setStage] = useState("idle");
+  const [note, setNote] = useState("");
+
+  const reload = useCallback(async () => {
+    setConfig(await loadConfig());
+    setStatus(await checkConnection());
+    const session = await getSession();
+    if (session && session.user) setEmail(session.user.email || "");
+  }, []);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const light = (on, label, hint) => (
+    <div className="sync-row" key={label}>
+      <span className={`sync-dot${on ? " on" : ""}`} aria-hidden="true" />
+      <span className="sync-label">{label}</span>
+      <span className="sync-hint">{on ? "yes" : hint}</span>
+    </div>
+  );
+
+  return (
+    <>
+      <div className="toggle-row">
+        <div className="toggle-text">
+          <div><strong>Team sync</strong></div>
+          <div className="toggle-sub">
+            A Supabase project holds the shared space. The publishable key is
+            safe here; the database password and service_role key are not, and
+            are never needed.
+          </div>
+        </div>
+      </div>
+
+      {status && (
+        <div className="sync-status">
+          {light(status.configured, "Project configured", "add the URL and key")}
+          {light(status.reachable, "Project reachable", "check the URL")}
+          {light(status.schema, "Schema applied", "run supabase/schema.sql")}
+          {light(status.signedIn, "Signed in", "sign in below")}
+        </div>
+      )}
+
+      <div className="form-row">
+        <label className="field-label" htmlFor="sb-url">Project URL</label>
+        <input
+          id="sb-url"
+          type="text"
+          value={config.url}
+          placeholder={DEFAULT_CONFIG.url}
+          onChange={(e) => setConfig((c) => ({ ...c, url: e.target.value }))}
+        />
+      </div>
+      <div className="form-row">
+        <label className="field-label" htmlFor="sb-key">Publishable key</label>
+        <input
+          id="sb-key"
+          type="text"
+          value={config.anonKey}
+          placeholder="sb_publishable_..."
+          onChange={(e) => setConfig((c) => ({ ...c, anonKey: e.target.value }))}
+        />
+      </div>
+      <div className="modal-actions">
+        <Button
+          onClick={async () => {
+            await saveConfig(config);
+            setNote("Saved. Re-checking...");
+            await reload();
+            setNote("");
+          }}
+        >
+          Save project
+        </Button>
+      </div>
+
+      <div className="toggle-row">
+        <div className="toggle-text">
+          <div><strong>{status && status.signedIn ? "Signed in" : "Sign in"}</strong></div>
+          <div className="toggle-sub">
+            A six-digit code by email. No password, and no redirect to register.
+          </div>
+        </div>
+      </div>
+
+      {status && status.signedIn ? (
+        <div className="modal-actions">
+          <Button
+            onClick={async () => {
+              await signOut();
+              setStage("idle");
+              setCode("");
+              await reload();
+            }}
+          >
+            Sign out
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="form-row">
+            <input
+              type="email"
+              value={email}
+              placeholder="you@example.com"
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          {stage === "sent" && (
+            <div className="form-row">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={code}
+                placeholder="six-digit code"
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </div>
+          )}
+          <div className="modal-actions">
+            {stage === "sent" ? (
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  setNote("Checking...");
+                  const res = await verifyCode(email, code);
+                  setNote(res.ok ? "" : res.error);
+                  if (res.ok) {
+                    setStage("idle");
+                    await reload();
+                  }
+                }}
+              >
+                Verify code
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  setNote("Sending...");
+                  const res = await sendCode(email);
+                  setNote(res.ok ? "Check your email for the code." : res.error);
+                  if (res.ok) setStage("sent");
+                }}
+              >
+                Email me a code
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+
+      {(note || (status && status.error)) && (
+        <p className="note">{note || status.error}</p>
+      )}
+    </>
+  );
+};
+
 const SettingsModal = ({ state, onClose, onDone }) => {
   const [status, setStatus] = useState(null);
   const [displayName, setDisplayName] = useState(state.identity.displayName || "Me");
@@ -541,6 +722,8 @@ const SettingsModal = ({ state, onClose, onDone }) => {
           </div>
         </>
       )}
+
+      <TeamSync />
 
       <div className="toggle-row">
         <div className="toggle-text">

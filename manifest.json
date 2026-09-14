@@ -13,7 +13,8 @@
   "host_permissions": [
     "https://www.facebook.com/*",
     "https://web.facebook.com/*",
-    "https://*.fbcdn.net/*"
+    "https://*.fbcdn.net/*",
+    "https://*.supabase.co/*"
   ],
   "background": {
     "service_worker": "background.js"
