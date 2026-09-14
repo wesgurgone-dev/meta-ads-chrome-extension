@@ -6,13 +6,11 @@
 \set ON_ERROR_STOP on
 \set QUIET on
 
-drop role if exists authenticated;
-create role authenticated nologin;
-grant usage on schema public to authenticated;
-grant all on all tables in schema public to authenticated;
-grant execute on all functions in schema public to authenticated;
-grant usage on schema auth to authenticated;
-grant select on auth.users to authenticated;
+-- The roles and the auth stub are created by run-tests.sh before the schema
+-- is applied, and no table grants are issued here. That is the point: this
+-- test used to grant them itself, which is why it passed against a schema
+-- that shipped none, while the first signed-in user on the real project would
+-- have hit "permission denied for table ads".
 
 insert into auth.users (id, email) values
   ('11111111-1111-1111-1111-111111111111', 'ana@example.com'),
@@ -101,5 +99,24 @@ select updated_at > created_at as pass from public.ads limit 1;
 update public.ads set deleted_at = now();
 select (select count(*) from public.ads) = 1
    and (select count(*) from public.ads where deleted_at is null) = 0 as pass;
+
+-- ---- anon holds the publishable key and must get nowhere ---------------
+\echo '10. an anonymous caller is refused before RLS is even consulted:'
+set role anon;
+reset request.jwt.claim.sub;
+do $$
+begin
+  begin
+    perform 1 from public.ads;
+    raise exception 'anon could read ads';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.join_team('GZGH6X');
+    raise exception 'anon could call join_team';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select true as pass;
 
 reset role;

@@ -40,10 +40,19 @@ write nothing**, a join code grants access and a wrong one is refused, the same
 ad saved twice upserts instead of duplicating, `updated_at` moves so
 "changed since" pulls work, and a soft delete hides a row without removing it.
 
-The suite has already earned its place once: `join_team` declared a record
+The suite has earned its place twice. First, `join_team` declared a record
 variable called `found`, which shadows PL/pgSQL's own result flag, so
-`if not found` negated a record instead of the flag and the function failed for
+`if not found` negated a record instead of the flag and the function raised for
 every caller.
+
+Second, and only visible against a real project: the schema shipped **no table
+grants at all**. RLS decides which rows a role may touch; it does not grant the
+role the right to touch the table. A superuser in the SQL editor never feels
+that, and the test did not either, because the test granted the privileges to
+itself before running. The first signed-in user would have hit `permission
+denied for table ads`. The grants are in the schema now, the test issues none,
+and a tenth check confirms an anonymous caller holding the publishable key is
+refused at the privilege check before RLS is even consulted.
 
 ## The two decisions that shape everything else
 

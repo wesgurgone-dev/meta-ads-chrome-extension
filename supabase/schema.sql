@@ -105,6 +105,29 @@ create table if not exists public.list_ads (
 
 create index if not exists list_ads_ad_idx on public.list_ads (ad_id);
 
+-- ------------------------------------------------------------------ grants
+--
+-- RLS decides which rows a role may touch; it does not grant the role the
+-- right to touch the table at all. Both are needed, and this half is easy to
+-- forget because a superuser in the SQL editor never feels it: the first
+-- signed-in user does, as "permission denied for table ads".
+--
+-- Only authenticated gets anything. anon is left with nothing, so an
+-- unauthenticated caller holding the publishable key is refused at the
+-- privilege check before RLS is even consulted.
+
+grant usage on schema public to authenticated;
+
+grant select, insert, update, delete on
+  public.profiles, public.teams, public.team_members,
+  public.lists, public.ads, public.list_ads
+  to authenticated;
+
+revoke all on
+  public.profiles, public.teams, public.team_members,
+  public.lists, public.ads, public.list_ads
+  from anon;
+
 -- ------------------------------------------------------------- row security
 
 alter table public.profiles     enable row level security;
@@ -196,6 +219,14 @@ as $$
 -- makes "if not found" negate this record instead of the flag.
 declare team public.teams;
 begin
+  -- A definer function runs with the owner's rights, so it has to check the
+  -- caller itself. Without this an anonymous caller could guess codes, and
+  -- would fail later with a confusing not-null violation rather than a clear
+  -- refusal.
+  if auth.uid() is null then
+    raise exception 'sign in before joining a team';
+  end if;
+
   select * into team from public.teams t where t.join_code = upper(trim(code));
   if team.id is null then
     raise exception 'no team with that code';
@@ -248,3 +279,10 @@ begin
          for each row execute function public.touch_updated_at()', t);
   end loop;
 end $$;
+
+-- join_team is security definer, so its grant is the whole access control.
+revoke all on function public.join_team(text) from public, anon;
+grant execute on function public.join_team(text) to authenticated;
+
+revoke all on function public.is_team_member(uuid) from public, anon;
+grant execute on function public.is_team_member(uuid) to authenticated;
