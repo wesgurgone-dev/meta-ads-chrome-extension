@@ -19,6 +19,7 @@ import {
   verifyCode,
 } from "../../src/supabase/client.js";
 import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../../src/supabase/config.js";
+import { checkProxy } from "../../src/supabase/ai.js";
 import {
   createTeam,
   createTeamSpace,
@@ -799,6 +800,7 @@ const TeamModal = ({ space, state, onClose, onDone, onImport, setActiveList }) =
 const TeamSync = () => {
   const [config, setConfig] = useState({ url: "", anonKey: "" });
   const [status, setStatus] = useState(null);
+  const [proxy, setProxy] = useState(null);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [stage, setStage] = useState("idle");
@@ -807,6 +809,10 @@ const TeamSync = () => {
   const reload = useCallback(async () => {
     setConfig(await loadConfig());
     setStatus(await checkConnection());
+    // Every AI feature - watching an ad, scoring it, writing a shot list -
+    // goes through one Edge Function. Until this was shown, an undeployed
+    // function looked like three separate broken features.
+    setProxy(await checkProxy());
     const session = await getSession();
     if (session && session.user) setEmail(session.user.email || "");
   }, []);
@@ -842,8 +848,26 @@ const TeamSync = () => {
           {light(status.reachable, "Project reachable", "check the URL")}
           {light(status.schema, "Schema applied", "run supabase/schema.sql")}
           {light(status.signedIn, "Signed in", "sign in below")}
+          {proxy
+            ? light(
+                proxy.deployed,
+                "AI function deployed",
+                "supabase functions deploy claude",
+              )
+            : null}
+          {proxy && proxy.deployed
+            ? light(proxy.keySet, "AI key set", "supabase secrets set ANTHROPIC_API_KEY=...")
+            : null}
         </div>
       )}
+
+      {proxy && !proxy.deployed ? (
+        <p className="note score-error">
+          Nothing AI-powered works until this is deployed: ads are not watched,
+          so they are not scored, and Discover falls back to keywords from the
+          caption. Deploy it with the two commands above, then reopen this page.
+        </p>
+      ) : null}
 
       <div className="form-row">
         <label className="field-label" htmlFor="sb-url">Project URL</label>

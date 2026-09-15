@@ -69,12 +69,25 @@ export const ask = async ({
 
   const text = await res.text();
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed && parsed.error) message = parsed.error;
-    } catch (err) {
-      /* not JSON; the status is all we have */
+    // A bare "Request failed (404)" is the least useful thing this could say.
+    // A 404 here has exactly one cause and exactly one fix, and the same is
+    // true of a 401, so both name the command rather than the status.
+    let message;
+    if (res.status === 404)
+      message =
+        "The AI function is not deployed. Run: supabase functions deploy claude";
+    else if (res.status === 401 || res.status === 403)
+      message =
+        "The AI function refused the request. Either sign in under Settings, or allow signed-out use: supabase secrets set ALLOW_ANON=true";
+    else if (res.status === 429) message = "The daily AI limit has been reached.";
+    else {
+      message = `Request failed (${res.status})`;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && parsed.error) message = parsed.error;
+      } catch (err) {
+        /* not JSON; the status is all we have */
+      }
     }
     return { ok: false, error: message, status: res.status };
   }

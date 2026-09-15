@@ -46,11 +46,20 @@ blocks end-to-end testing of everything that needs a team.
 
 ### Open, and waiting on a deploy
 
-**The Anthropic proxy.** `supabase secrets set ANTHROPIC_API_KEY=...` then
-`supabase functions deploy claude`. Scoring and generation both go through it and
-neither can run until it is up; `checkProxy()` in `src/supabase/ai.js` says which
-of the two steps is missing. Everything either feature does *before* the call -
-frame capture, term derivation, the graph, the caches - works without it.
+**The Anthropic proxy. This is the only thing standing between the current build
+and a working product.** Verified live on 2026-09-15: the function endpoint
+returns `{"code":"NOT_FOUND"}`, so it has never been deployed, and therefore
+nothing AI-powered has ever run. Ads are not watched, so they are not scored,
+and Discover falls back to counting words in the caption. Three symptoms, one
+cause.
+
+    ANTHROPIC_API_KEY=sk-ant-... bash supabase/deploy.sh
+
+Settings now carries an "AI function deployed" row so this is visible rather
+than inferred from three separate broken features. Everything each feature does
+*before* the call - frame capture, the lexical term fallback, the canvas graph,
+the caches - works without it, which is exactly why the failure was so easy to
+misread.
 
 **The schema.** `supabase/schema.sql` has grown `ad_scores` and the four canvas
 tables since it was last applied. It is idempotent; re-run the whole file.

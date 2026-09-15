@@ -550,12 +550,20 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   await dash.locator('.sidebar-footer .ogui-button:has-text("Settings")').click();
   await dash.waitForTimeout(2500);
   const rows = (await dash.locator('.sync-row').allInnerTexts()).map((s) => s.replace(/\s+/g, ' ').trim());
-  ok(rows.length === 4, `four status rows (${rows.length})`);
+  ok(rows.length === 5, `five status rows (${rows.length})`);
   ok(/Project configured yes/.test(rows[0] || ''), `configured: ${rows[0]}`);
   ok(/Project reachable yes/.test(rows[1] || ''), `reachable: ${rows[1]}`);
   ok(/Schema applied run supabase\/schema\.sql/.test(rows[2] || ''),
      `schema missing is named, with the fix: ${rows[2]}`);
   ok(/Signed in sign in below/.test(rows[3] || ''), `signed out: ${rows[3]}`);
+  // Every AI feature goes through one Edge Function. Before this row existed an
+  // undeployed function looked like three separate broken features - no scores,
+  // no shot lists, and Discover quietly falling back to caption keywords.
+  ok(/AI function deployed supabase functions deploy claude/.test(rows[4] || ''),
+     `an undeployed AI function is named, with the command: ${rows[4]}`);
+  const whole = (await dash.locator('.sync-status').innerText()).replace(/\s+/g, ' ');
+  ok(!/AI key set/.test(whole),
+     'and the key row stays hidden until there is a function to hold it');
 
   console.log('--- sending creative off the device is a visible choice ---');
   // The settings modal is already open from the block above.
