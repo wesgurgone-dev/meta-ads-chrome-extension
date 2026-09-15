@@ -189,9 +189,15 @@ Google session), magic link is far less setup. Start with magic link, add Google
 later if sign-in friction shows up.
 
 The redirect URL is `https://<extension-id>.chromiumapp.org/`. Add it to the
-Supabase allowed redirect list. The extension id is stable once you publish, but
-it changes on an unpacked reload unless you pin a `key` in the manifest, so pin
-it now.
+Supabase allowed redirect list. An unpacked extension's id is derived from the
+absolute path it was loaded from, so it survives a reload but not a move, a
+fresh clone, or a second machine - and a redirect registered against one
+machine's id is not much of a redirect.
+
+    node scripts/pin-extension-id.mjs
+
+writes a public key into the manifest and prints the id it produces, which is
+then fixed everywhere. Run it before registering anything against the id.
 
 ### MV3 constraints that will bite
 

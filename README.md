@@ -25,8 +25,21 @@ Turn the [Meta Ad Library](https://www.facebook.com/ads/library/) into a shared 
 ## Install (unpacked)
 
 1. Open `chrome://extensions`, enable **Developer mode**.
-2. **Load unpacked** and select this `meta-ads-extension/` folder.
+2. **Load unpacked** and select this folder.
 3. Browse `facebook.com/ads/library`, scroll some results, and hit **Save** on any ad.
+
+After a code change, press the **reload** arrow on the extension's card. That is
+the whole update loop - there is no reinstall, and **Pack extension** is not
+part of it. Packing produces a `.crx` for distribution, which Chrome will not
+sideload on the stable channel anyway. The one thing to rebuild by hand is the
+bundles: `npm run build` after touching anything under `panel/src`,
+`dashboard/src` or `src`, since the committed IIFEs are what the pages load.
+
+An unpacked extension's id comes from the absolute path it was loaded from, so
+it survives reloads but changes if the folder moves or someone clones it
+elsewhere. `node scripts/pin-extension-id.mjs` writes a public key into the
+manifest and fixes the id everywhere; run it before registering that id with
+anything, such as an OAuth redirect.
 
 The side panel and the dashboard are React, bundled by esbuild into one
 committed IIFE per page (`pnpm`-free: `npm install && node build.mjs`). React is
