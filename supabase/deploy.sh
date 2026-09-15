@@ -27,6 +27,14 @@ if ! command -v supabase >/dev/null 2>&1; then
   exit 1
 fi
 
+# `supabase link` needs an authenticated CLI, and its failure message when you
+# are not logged in is not obvious.
+if ! supabase projects list >/dev/null 2>&1; then
+  echo "The Supabase CLI is not logged in. Run this first, then re-run me:"
+  echo "  supabase login"
+  exit 1
+fi
+
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   echo "ANTHROPIC_API_KEY is not set."
   echo "Get one at https://console.anthropic.com/settings/keys, then:"
@@ -70,6 +78,9 @@ case "$CODE" in
   *)   echo "Deployed. It answers HTTP $CODE to an empty request, which is correct." ;;
 esac
 
-echo
 echo "Now open the dashboard. It re-queues every unscored ad on load, so the"
 echo "ads you have already saved will be watched and scored without re-saving."
+echo
+echo "Settings should now show a green 'AI function deployed' row. If it does"
+echo "not, the extension is holding a stale service worker: reload it at"
+echo "chrome://extensions and reopen the dashboard."
