@@ -1432,7 +1432,7 @@ const pumpScores = async () => {
       const outcomes = await Promise.all(
         next.map((id) =>
           scoreOne(id, ctx).catch((err) => {
-            console.warn("[pake-ads] scoring", id, err);
+            console.warn("[ads] scoring", id, err);
             return "drop";
           }),
         ),
@@ -1715,7 +1715,7 @@ const openPanelFor = async (sender) => {
  */
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
-  .catch((err) => console.warn("[pake-ads] side panel behaviour:", err));
+  .catch((err) => console.warn("[ads] side panel behaviour:", err));
 
 /**
  * Write back a merged team space.

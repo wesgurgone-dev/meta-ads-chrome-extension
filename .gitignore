@@ -1,10 +1,3 @@
-# Vendored agent skills installed via `npx skills add` (see skills-lock.json).
-# 96MB of demos, bundled three.min.js and reference screenshots, so the payload
-# stays out of git. Restore the full set with:
-#   npx skills@latest experimental_install
-.agents/
-.claude/skills/
-
 # OS and editor noise
 .DS_Store
 Thumbs.db

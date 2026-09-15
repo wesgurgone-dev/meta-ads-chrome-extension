@@ -190,13 +190,29 @@ const LIB_PAGE = `<!doctype html><html><body style="margin:0">
   ok(refract.lensesEmpty, 'every lens is empty, so no content can be displaced');
   ok(refract.tones.length === 1, `one tone across the panel (${refract.tones.join()})`);
 
-  console.log('--- topo ground, and the theme is always resolved ---');
+  console.log('--- mesh ground, quiet, and the theme is always resolved ---');
   const ground = await panel.evaluate(() => ({
     image: getComputedStyle(document.body).backgroundImage,
-    topo: document.body.classList.contains('topo'),
+    mesh: document.body.classList.contains('mesh'),
     theme: document.documentElement.dataset.theme,
   }));
-  ok(ground.topo && /repeating-radial-gradient/.test(ground.image), 'contour lines behind everything');
+  ok(ground.mesh, 'the mesh ground is on the body');
+  ok(/feTurbulence/.test(ground.image), 'with grain over the colour, not under it');
+  // The project's own ramp, which the accent and the mark also come from.
+  ok(/rgba\(69, 16, 232/.test(ground.image), 'the violet stop is there');
+  ok(/rgba\(237, 12, 221/.test(ground.image), 'the magenta stop');
+  ok(/rgba\(255, 196, 29/.test(ground.image), 'the amber stop');
+  // "Very subtle" is a real requirement and the easiest one to lose: raising an
+  // alpha is a one-character edit that nothing else would catch.
+  const chroma = ['69, 16, 232', '237, 12, 221', '255, 196, 29']
+    .map((rgb) => {
+      const m = new RegExp(`rgba\\(${rgb},\\s*([0-9.]+)\\)`).exec(ground.image);
+      return m ? Number(m[1]) : null;
+    })
+    .filter((a) => a !== null);
+  ok(chroma.length === 3, `all three colour stops measured (${chroma.join(', ')})`);
+  ok(Math.max(...chroma) <= 0.32,
+     `the loudest stop is a tint, not a background (${Math.max(...chroma)})`);
   // "system" used to leave the attribute unset, which left the page stylesheet
   // on its dark default while the library resolved the material to light.
   ok(['dark', 'light'].includes(ground.theme), `theme resolved to ${ground.theme}, never left unset`);

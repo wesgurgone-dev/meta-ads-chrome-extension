@@ -37,20 +37,28 @@ parts that run inside Facebook's page. Icons are checked in; regenerate with `no
 
 ## Look
 
-The ground is one gradient ramp, used everywhere:
+The ground is one gradient ramp, used everywhere - it is where the accent
+colour and the mark come from too:
 
 ```
 #070707  0%     #4510e8  50%     #ed0cdd  71%     #ffc41d  86%     #ffffff 100%
 ```
 
 It is not painted as a ramp. Each stop is pulled out into its own oversized
-radial blob, the whole thing is blurred hard, and a scrim sits on top: enough
-to keep type legible, not so much that four distinct colours collapse into one
-purple. The panel and the dashboard share that ground exactly, same blobs, same
-blur, same scrim; they drifted apart once when one was retuned and the other
-was not, so a test now compares the two computed grounds directly. Grain over the scrim and again, fainter, on the glass hides the banding
-a gradient this large would otherwise show, and gives the blur something to
-work on so the two surfaces meet without a hard synthetic line.
+radial blob, so the colours meet where they overlap rather than in a band, and
+every one of them is held low enough that the result reads as a tinted dark
+rather than as a gradient you would describe to somebody. That restraint is the
+design, not a compromise: the whole page sits on top of this, and vivid is
+unreadable. A test measures the three colour stops and fails if any of them
+climbs past a tint, because raising an alpha is a one-character edit nothing
+else would catch.
+
+Two things the ground still has to do, which is why the blobs are large rather
+than tight. The glass surfaces sample what is behind them, so a flat ground
+makes them look like flat tinted panes. And the grain over the top gives the
+backdrop blur something to work on, so glass meets ground without a hard
+synthetic line where the blur stops. The grain is an inline `feTurbulence`
+rather than an image: nothing to fetch, nothing to keep in sync.
 
 Above the ground there is exactly one material, and it is thin: at most 0.26
 alpha, so the ramp reads straight through it. What makes it a material rather
@@ -59,9 +67,7 @@ top edge and a specular sheen down the top-left. The glass itself carries no
 grain; grain is a property of the ground, and the blur pulls it through. Nor
 does the glass cast a drop shadow, which at this thinness only darkened
 whatever sat below it. Nothing is opaque and no glass stacks on glass, which is
-where legibility collapses. Text never sits directly on the ramp: section labels
-and empty states carry their own strip of material, because the ramp is vivid by
-design and vivid is unreadable.
+where legibility collapses.
 
 Type is SF Pro Display where it exists. Apple's font is licensed for Apple
 platforms and is **not** redistributed here: the stack asks for it by name, then
@@ -70,7 +76,8 @@ tight on headings and near zero on body, because one `letter-spacing` value is
 wrong somewhere.
 
 Motion is minimal and lives on the press rather than the release. Both themes
-share the ramp; the theme changes the scrim and the material, not the artwork.
+share the ramp; the light theme carries less of every stop, because the same
+alphas over a bright ground read as a stain rather than as a tint.
 `prefers-reduced-transparency` drops the blur and the grain for solid surfaces,
 `prefers-contrast: more` firms up the edges, and `prefers-reduced-motion`
 removes the press transforms.

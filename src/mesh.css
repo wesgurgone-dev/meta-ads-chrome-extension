@@ -1,0 +1,76 @@
+/**
+ * The ground: one mesh gradient, very quiet, with grain over it.
+ *
+ * It is the project's original ramp, which is where the accent colour and the
+ * mark both come from:
+ *
+ *   #070707 0%   #4510e8 50%   #ed0cdd 71%   #ffc41d 86%   #ffffff 100%
+ *
+ * It is not painted as a ramp. Each stop is pulled out into its own oversized
+ * radial blob so the colours meet where they overlap rather than in a band, and
+ * every one of them is held at a low enough alpha that the ground reads as a
+ * tinted dark rather than as a gradient you would describe to somebody. Vivid
+ * is unreadable, and the whole page sits on top of this.
+ *
+ * Two things it has to keep doing, which is why the blobs are large rather than
+ * tight. The glass surfaces sample what is behind them, so a ground with no
+ * variation makes them look like flat tinted panes - there has to be something
+ * to sample. And the grain gives the backdrop blur something to work on, so the
+ * glass meets the ground without a hard synthetic line where the blur stops.
+ *
+ * Pure CSS, no asset, one paint. The grain is an inline feTurbulence rather
+ * than a PNG so there is nothing to fetch and nothing to keep in sync.
+ */
+
+:root {
+  --mesh-ink: #08070c;
+  /* The ramp, as blobs. Alphas are the whole design: raise any of these and it
+     stops being a ground and starts being a background. */
+  --mesh-violet: rgba(69, 16, 232, 0.3);
+  --mesh-magenta: rgba(237, 12, 221, 0.14);
+  --mesh-amber: rgba(255, 196, 29, 0.09);
+  --mesh-white: rgba(255, 255, 255, 0.07);
+  /* Baked opacity: background layers cannot carry their own, so the grain's
+     strength lives in the SVG. */
+  --mesh-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='0.055'/%3E%3C/svg%3E");
+}
+
+:root:not([data-theme="light"]) {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --mesh-ink: #f4f3f7;
+  /* Light mode carries less of everything. The same alphas over a bright ground
+     read as a stain rather than as a tint, and text has to sit on this. */
+  --mesh-violet: rgba(69, 16, 232, 0.1);
+  --mesh-magenta: rgba(237, 12, 221, 0.06);
+  --mesh-amber: rgba(255, 196, 29, 0.07);
+  --mesh-white: rgba(255, 255, 255, 0.55);
+  --mesh-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+.mesh {
+  background-color: var(--mesh-ink);
+  /* First layer paints on top, so the grain sits over the colour rather than
+     under it - otherwise the blobs wash it out and there is no point to it. */
+  background-image:
+    var(--mesh-grain),
+    radial-gradient(90% 70% at 88% 4%, var(--mesh-white) 0%, transparent 60%),
+    radial-gradient(85% 65% at 72% 14%, var(--mesh-amber) 0%, transparent 62%),
+    radial-gradient(95% 75% at 44% 28%, var(--mesh-magenta) 0%, transparent 66%),
+    radial-gradient(130% 100% at 8% 92%, var(--mesh-violet) 0%, transparent 72%);
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  /* Fixed, so the ground stays put while the page scrolls over it. A ground
+     that scrolls reads as content. */
+  background-attachment: fixed;
+}
+
+/* Someone who has asked for less transparency is not asking for a texture
+   either. Flat ink, and every surface above it already has its own fallback. */
+@media (prefers-reduced-transparency: reduce) {
+  .mesh {
+    background-image: none;
+  }
+}
